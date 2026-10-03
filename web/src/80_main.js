@@ -6,6 +6,7 @@ const App={
   async start(){
     let done;this.ready=new Promise(r=>done=r);
     Engine.init();restore();Engine.wrap=!!P.edges;
+    if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
     UI.build();Input.init();Music.init();
     Space.update(P,0,Engine.res,Engine.world,0);
@@ -31,7 +32,7 @@ const App={
     if(cap&&el<1/cap-.002)return;
     if(!this.firstFrame){this.firstFrame=performance.now()}
     this.last=now;const dt=Math.min(Math.max(el,1/500),.05),t0=performance.now();
-    this.frames++;this.fpsT+=el;if(this.fpsT>=.5){this.fps=this.frames/this.fpsT;this.frames=0;this.fpsT=0;$('#fps').textContent=P.st?Math.round(this.fps)+' fps':''}
+    this.frames++;this.fpsT+=el;if(this.fpsT>=.5){this.fps=this.frames/this.fpsT;this.frames=0;this.fpsT=0;this.adapt();$('#fps').textContent=P.st?Math.round(this.fps)+' fps':''}
     clock+=dt;stepMorph(dt);
     if(P.cyc&&!this.paused&&(this.cycT=(this.cycT||0)+dt)>20){this.cycT=0;UI.cycle()}
 
@@ -62,6 +63,11 @@ const App={
     this.cpu=this.cpu*.9+(performance.now()-t0)*.1;
     if(UI.open&&UI.tab===6&&now-this.diagT>1000){this.diagT=now;UI.diag.textContent=`${Math.round(this.fps)} fps · CPU ${this.cpu.toFixed(1)} ms · render ${Engine.res.join('×')} · sim ${Engine.sim.join('×')} · ink ${Engine.ink.join('×')} · GPU memory ~${Math.round(Engine.memoryMiB())} MiB · ${gl.getParameter(gl.RENDERER)}`}
     if(audio._media&&UI.seek){UI.seek.max=audio.duration||1;if(document.activeElement!==UI.seek)UI.seek.value=audio.position||0}
+  },
+  adapt(){   // phone only: if frames stay slow, shed resolution a step at a time
+    if(!NATIVE||this.paused||UI.open&&UI.tab===6)return;
+    this.slow=this.fps<40?(this.slow||0)+1:0;
+    if(this.slow>=6&&P.rscale>.5){this.slow=0;P.rscale=Math.max(.5,+(P.rscale-.1).toFixed(2));Engine.allocate(quality());persist();UI.sync()}
   },
   record(){
     if(this.rec){this.rec.r.stop();return}
