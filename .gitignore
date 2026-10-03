@@ -1,0 +1,12 @@
+# build output and local tooling
+.gradle/
+.gradle-home/
+.kotlin/
+**/build/
+local.properties
+*.apk
+*.aab
+.shots/
+.claude/
+__pycache__/
+node_modules/
