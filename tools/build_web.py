@@ -48,5 +48,20 @@ def build():
     out.write_text(html, encoding='utf-8')
     print(f'Built {out.relative_to(ROOT)}: {len(html.encode()):,} bytes')
 
+PAD_SOURCES = ['src/00_util.js', 'src/40_audio.js', 'src/46_pad.js', 'pad/main.js']
+
+def build_pad():
+    """Dynamic Pad: the controller-only music feeler. Shares util, audio analysis and the controller core."""
+    html = (ROOT / 'web' / 'pad.html').read_text(encoding='utf-8')
+    js = '\n'.join((ROOT / 'web' / f).read_text(encoding='utf-8') for f in PAD_SOURCES)
+    html = html.replace('<!--SCRIPT-->', '<script>\nconst TAU=Math.PI*2;\n' + js + '\n</script>')
+    icon = ROOT / 'web' / 'favicon.png'
+    if icon.exists():
+        html = html.replace('<!--ICON-->', f'<link rel="icon" type="image/png" href="data:image/png;base64,{base64.b64encode(icon.read_bytes()).decode()}">')
+    out = ROOT / 'docs' / 'pad.html'
+    out.write_text(html, encoding='utf-8')
+    print(f'Built {out.relative_to(ROOT)}: {len(html.encode()):,} bytes')
+
 if __name__ == '__main__':
     build()
+    build_pad()

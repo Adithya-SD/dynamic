@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05060a">
+<title>Dynamic Pad</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+<style>
+:root{--bg:#05060a;--fg:#f2f4fa;--dim:#fff9;--line:#ffffff1f;--glass:#ffffff0d;--lo:#ff6a3d;--hi:#56d8ff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{display:flex;justify-content:center;overflow-x:hidden}
+#bg{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+main{position:relative;z-index:1;width:min(560px,100%);padding:max(20px,env(safe-area-inset-top)) 16px 32px;display:flex;flex-direction:column;gap:14px}
+h1{margin:6px 0 0;font-size:26px;font-weight:700;letter-spacing:.3px}h1 span{font-weight:400;color:var(--dim)}
+.card{background:var(--glass);border:1px solid var(--line);border-radius:18px;padding:14px 16px;backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4)}
+.card h2{margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--dim)}
+#pad{display:flex;align-items:center;gap:12px}#pad b{font-weight:600}#pad i{width:10px;height:10px;border-radius:50%;background:#555;flex:none}#pad.on i{background:#5f8;box-shadow:0 0 10px #5f8}
+#pad small{display:block;color:var(--dim)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;color:var(--fg);background:#ffffff12;border:1px solid var(--line);border-radius:999px;padding:9px 15px;cursor:pointer}
+button.on{background:#fff;color:#000;border-color:#fff}button:active{transform:scale(.97)}
+#status{margin:10px 0 0;color:var(--dim);font-size:13px;min-height:1.4em}
+.motors{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.m{position:relative;height:120px;border-radius:14px;background:#ffffff08;border:1px solid var(--line);overflow:hidden}
+.m div{position:absolute;left:0;right:0;bottom:0;height:calc(var(--v,0)*100%);background:linear-gradient(to top,var(--c),transparent);transition:height .03s linear}
+.m span{position:absolute;left:12px;top:10px;font-size:13px;color:var(--dim)}.m strong{position:absolute;right:12px;top:8px;font-variant-numeric:tabular-nums}
+#lo{--c:var(--lo)}#hi{--c:var(--hi)}
+#bands{display:flex;align-items:flex-end;gap:2px;height:56px;margin-top:12px}#bands i{flex:1;height:calc(2px + var(--l,0)*54px);border-radius:2px;background:linear-gradient(to top,var(--lo),var(--hi));opacity:.85}
+label.s{display:flex;align-items:center;gap:12px;margin-top:6px}label.s input{flex:1;accent-color:#fff}label.s output{width:3.2em;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim)}
+p.help{margin:8px 0 0;color:var(--dim);font-size:13px}
+a{color:#9ef}
+#note{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:5;background:#000c;border:1px solid var(--line);border-radius:12px;padding:10px 14px;max-width:calc(100% - 32px)}
+input[type=file]{display:none}
+</style></head>
+<body>
+<canvas id="bg"></canvas>
+<main>
+  <h1>Dynamic <span>Pad</span></h1>
+  <section class="card"><div id="pad"><i></i><div><b id="padname">No controller yet</b><small id="padhint">Connect a controller and press any button.</small></div></div></section>
+  <section class="card"><h2>Listen to</h2>
+    <div class="row" id="src"></div><input type="file" id="file" accept="audio/*">
+    <p id="status">Pick a source. The heavy motor plays the bass, the light motor plays the treble.</p>
+  </section>
+  <section class="card"><h2>Feel</h2>
+    <div class="motors"><div class="m" id="lo"><div></div><span>Heavy · bass</span><strong>0</strong></div><div class="m" id="hi"><div></div><span>Light · treble</span><strong>0</strong></div></div>
+    <div id="bands"></div>
+    <div class="row" id="mode" style="margin-top:12px"></div>
+    <label class="s">Strength<input id="gain" type="range" min="0" max="2" step="0.05"><output id="gainv"></output></label>
+    <p class="help" id="modehelp"></p>
+    <div class="row" style="margin-top:10px"><button id="test">Test motors</button><a style="align-self:center;margin-left:auto" id="open" href="index.html">Open Dynamic</a></div>
+  </section>
+</main>
+<div id="note" hidden></div>
+<script>
+const TAU=Math.PI*2;
+'use strict';
+/* Small shared helpers. Every module below is concatenated in filename order by tools/build_web.py. */
+const $=s=>document.querySelector(s);
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const fract=x=>x-Math.floor(x);
+const VW=()=>innerWidth||document.documentElement.clientWidth||1;
+const VH=()=>innerHeight||document.documentElement.clientHeight||1;
+function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e}
+const store={
+  get(k,f){try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v)}catch{return f}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
+};
+function hsv(h,s,v){h=fract(h)*6;const i=h|0,f=h-i,p=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));return[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i%6]}
+const NATIVE=window.DynamicNative||null;   // set by the Android shell; absent in a normal browser
+if(NATIVE)document.documentElement.classList.add('native');
+const haptic=ms=>{try{NATIVE?NATIVE.haptic(ms):navigator.vibrate&&navigator.vibrate(ms)}catch{}};
+async function download(blob,name){
+  if(NATIVE){   // WebView cannot follow blob: downloads, so stream the file to the shell in 768 KB chunks
+    NATIVE.beginSave(name,blob.type||'application/octet-stream');
+    for(let o=0;o<blob.size;o+=786432){const buf=new Uint8Array(await blob.slice(o,o+786432).arrayBuffer());let b='';for(let i=0;i<buf.length;i+=8192)b+=String.fromCharCode.apply(null,buf.subarray(i,i+8192));NATIVE.saveChunk(btoa(b))}
+    notice(NATIVE.endSave());return;
+  }
+  const url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+async function copyText(t){if(NATIVE){NATIVE.copy(t);return}await navigator.clipboard.writeText(t)}
+const svgIcon=(d,cls='')=>`<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true"><path d="${d}"/></svg>`;
+let noteTimer=0;
+function notice(text,ms=5000){const n=$('#note');n.textContent=text;n.hidden=false;UI&&(UI.layoutDirty=true);clearTimeout(noteTimer);noteTimer=setTimeout(()=>{n.hidden=true;UI&&(UI.layoutDirty=true)},ms)}
+var UI=null;
+
+/* Standalone browser audio capture and 24-band onset analysis. */
+(function (root) {
+  'use strict';
+
+  const BAND_COUNT = 24;
+  const FFT_SIZE = 2048;
+  const HOP_SIZE = 128;
+  const MIN_HZ = 35;
+  const MAX_HZ = 16000;
+
+  function makeBandEdges(sampleRate, fftSize) {
+    const hi = Math.min(MAX_HZ, sampleRate / 2);
+    const edges = new Uint16Array(BAND_COUNT + 1);
+    const maxBin = fftSize / 2;
+    for (let i = 0; i <= BAND_COUNT; i++) {
+      const hz = MIN_HZ * Math.pow(hi / MIN_HZ, i / BAND_COUNT);
+      edges[i] = Math.min(maxBin, Math.max(1, Math.round(hz * fftSize / sampleRate)));
+    }
+    return edges;
+  }
+
+  // Kept pure/exported so onset behavior can be tested without browser APIs.
+  function createBandDetector() {
+    const previous = new Float32Array(BAND_COUNT);
+    const average = new Float32Array(BAND_COUNT);
+    const cooldown = new Float64Array(BAND_COUNT);
+    cooldown.fill(-1e9);
+    return function detect(levels, time, out) {
+      out = out || new Float32Array(BAND_COUNT);
+      out.fill(0);
+      for (let i = 0; i < BAND_COUNT; i++) {
+        const level = Math.max(0, levels[i] || 0);
+        const flux = Math.max(0, level - previous[i]);
+        const threshold = Math.max(0.025, average[i] * 1.8);
+        if (flux > threshold && level > 0.035 && time - cooldown[i] >= 0.035) {
+          out[i] = Math.min(1, flux * 3.2);
+          cooldown[i] = time;
+        }
+        average[i] = average[i] * 0.92 + flux * 0.08;
+        previous[i] = level;
+      }
+      return out;
+    };
+  }
+
+  const moduleLoads = new WeakMap();
+  function workletSource() {
+    return `class DynamicsBandsProcessor extends AudioWorkletProcessor {
+      constructor() {
+        super(); this.n=2048; this.hop=128; this.ring=new Float32Array(this.n); this.write=0; this.since=0;
+        this.re=new Float32Array(this.n); this.im=new Float32Array(this.n); this.window=new Float32Array(this.n);this.reverse=new Uint16Array(this.n);this.cosine=new Float32Array(this.n/2);this.sine=new Float32Array(this.n/2);
+        for(let i=0;i<this.n;i++){this.window[i]=0.5-0.5*Math.cos(6.283185307179586*i/(this.n-1));let x=i,r=0;for(let b=0;b<11;b++){r=(r<<1)|(x&1);x>>=1;}this.reverse[i]=r;}
+        for(let i=0;i<this.n/2;i++){const a=-6.283185307179586*i/this.n;this.cosine[i]=Math.cos(a);this.sine[i]=Math.sin(a);}
+        this.lastAnalysisTime=0;this.report=0;this.edges=new Uint16Array(25);
+        for(let i=0;i<=24;i++){const hz=35*Math.pow(Math.min(16000,sampleRate/2)/35,i/24);this.edges[i]=Math.max(1,Math.round(hz*this.n/sampleRate));}
+        this.prev=new Float32Array(24);this.avg=new Float32Array(24);this.cool=new Float64Array(24);this.cool.fill(-1e9);
+        this.pool=[];for(let i=0;i<16;i++)this.pool.push({levels:new Float32Array(24),onsets:new Float32Array(24)});
+        this.port.onmessage=e=>{if(e.data&&e.data.levels&&e.data.onsets)this.pool.push(e.data);};
+        this.port.postMessage({ready:true});
+      }
+      process(inputs) {
+        const input=inputs[0]&&inputs[0][0]; if(!input)return true;
+        for(let j=0;j<input.length;j++){this.ring[this.write]=input[j];this.write=(this.write+1)&2047;this.since++;}
+        this.report+=input.length;if(this.report<this.hop)return true;this.report-=this.hop;this.since=0;
+        const item=this.pool.pop();if(!item)return true;const interval=Math.max(this.hop/sampleRate,currentTime-this.lastAnalysisTime),fluxScale=(512/sampleRate)/interval,retain=Math.pow(.92,interval*sampleRate/512);this.lastAnalysisTime=currentTime;
+        // Persistent FFT buffers, Hann window, bit-reversal order and twiddles avoid per-block allocation/trig.
+        for(let i=0;i<this.n;i++){const q=this.reverse[i],x=this.ring[(this.write+i)&2047]*this.window[i];this.re[q]=x;this.im[q]=0;}
+        for(let len=2;len<=this.n;len<<=1){const stride=this.n/len;for(let base=0;base<this.n;base+=len){for(let k=0;k<len/2;k++){const ti=k*stride,wr=this.cosine[ti],wi=this.sine[ti],a=base+k,b=a+len/2,vr=this.re[b]*wr-this.im[b]*wi,vi=this.re[b]*wi+this.im[b]*wr;this.re[b]=this.re[a]-vr;this.im[b]=this.im[a]-vi;this.re[a]+=vr;this.im[a]+=vi;}}}
+        
+        for(let b=0;b<24;b++){let sum=0,start=this.edges[b],end=this.edges[b+1];if(end<=start){start=Math.min(1023,Math.max(1,start));end=start+1;}for(let k=start;k<end&&k<1024;k++){const re=this.re[k],im=this.im[k];sum+=re*re+im*im;}const level=Math.min(1,Math.sqrt(sum)/1024*4);const flux=Math.max(0,level-this.prev[b])*fluxScale;const threshold=Math.max(0.025,this.avg[b]*1.8);item.onsets[b]=flux>threshold&&level>0.035&&currentTime-this.cool[b]>=0.035?Math.min(1,flux*3.2):0;if(item.onsets[b])this.cool[b]=currentTime;this.avg[b]=this.avg[b]*retain+flux*(1-retain);this.prev[b]=level;item.levels[b]=level;}
+        item.time=currentTime;this.port.postMessage(item,[item.levels.buffer,item.onsets.buffer]); return true;
+      }
+    } registerProcessor('dynamics-bands',DynamicsBandsProcessor);`;
+  }
+
+  class DynamicsAudio {
+    constructor() {
+      this.onState = null;
+      this.onBands = null;this.analysisHz=0;this._reportCount=0;this._reportStart=0;
+      this.state = 'off';
+      this.position = 0;
+      this.duration = 0;
+      this.file = null;
+      this._ctx = null; this._source = null; this._stream = null; this._media = null;
+      this._worklet = null; this._mute = null; this._fallbackTimer = null; this._objectUrl = null; this._moduleUrl = null; this._generation = 0;
+      this._analyser = null; this._freq = null; this._lastLevels = new Float32Array(BAND_COUNT);
+      this._detect = createBandDetector(); this._videoTrack = null; this._kind = 'off';
+    }
+    _state(value, detail) { this.state = value; if (typeof this.onState === 'function') this.onState({ state: value, detail: detail || null }); }
+    async _context() {
+      const Ctx = root.AudioContext || root.webkitAudioContext;
+      if (!Ctx) throw new Error('Web Audio is unavailable in this browser.');
+      if (!this._ctx || this._ctx.state === 'closed') this._ctx = new Ctx();
+      try { await this._ctx.resume(); } catch (_) { /* caller can retry from a user gesture */ }
+      return this._ctx;
+    }
+    async select(kind, options) {
+      options = options || {};
+      if (!['off','mic','desktop','file','stream'].includes(kind)) throw new TypeError('Unknown audio source: ' + kind);
+      await this.stop();
+      if (kind === 'off') { this._state('off'); return; }
+      const generation=++this._generation;
+      this._kind = kind;
+      try {
+        const ctx = await this._context();
+        if(generation!==this._generation)return;
+        if (kind === 'mic') {
+          if (!root.navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('Microphone capture is unavailable.');
+          const stream = await navigator.mediaDevices.getUserMedia({audio:{deviceId:options.deviceId?{exact:options.deviceId}:undefined,echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+          if(generation!==this._generation){for(const t of stream.getTracks())t.stop();return;}this._stream=stream;
+          this._source = ctx.createMediaStreamSource(this._stream);
+          const status=await this._connectAnalysis(this._source,generation);if(generation===this._generation)this._state('mic',status);return;
+        }
+        if (kind === 'desktop') {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) throw new Error('Desktop audio capture is unavailable.');
+          const stream = await navigator.mediaDevices.getDisplayMedia({audio:true,video:true});
+          if(generation!==this._generation){for(const t of stream.getTracks())t.stop();return;}this._stream=stream;
+          const audioTracks = this._stream.getAudioTracks();
+          if (!audioTracks.length) { this._releaseStream(); throw new Error('The selected screen or tab did not share audio.'); }
+          this._videoTrack = this._stream.getVideoTracks()[0] || null; // Keep display capture alive until stop().
+          this._source = ctx.createMediaStreamSource(this._stream);const status=await this._connectAnalysis(this._source,generation);if(generation===this._generation)this._state('desktop',status);return;
+        }
+        if (!root.document) throw new Error('HTML media playback is unavailable.');
+        const media = this._media = document.createElement('audio'); media.preload='auto'; media.crossOrigin='anonymous'; media.controls=false;
+        const url = options.url || (options.file && URL.createObjectURL(options.file));
+        if (!url) throw new Error('Provide a file or URL for this source.');
+        if (options.file) this._objectUrl = url;
+        media.src = url; this.file = options.file || url; media.onended=()=>this._state('ended');
+        media.onerror=()=>{if(generation===this._generation)this._state('error','Media failed to load; check the URL, format, and CORS policy.');};
+        media.ontimeupdate=()=>{this.position=media.currentTime||0;this.duration=Number.isFinite(media.duration)?media.duration:0;};
+        this._source = ctx.createMediaElementSource(media); this._source.connect(ctx.destination); // Only files/streams are monitored; live capture is never played back.
+        const status=await this._connectAnalysis(this._source,generation);if(generation!==this._generation)return;
+        try { await media.play(); } catch (e) { this._releaseAll(); this._state('error',e.message); throw new Error('Media playback needs a user gesture or failed to start: '+e.message); }
+        this._state(kind,status);
+      } catch (e) { if(generation!==this._generation)return;this._releaseAll();this._state('error', e && e.message || String(e)); throw e; }
+    }
+    async _connectAnalysis(source,generation) {
+      const ctx=this._ctx; this._analyser=ctx.createAnalyser(); this._analyser.fftSize=1024; this._analyser.smoothingTimeConstant=0;
+      source.connect(this._analyser); this._freq=new Float32Array(this._analyser.frequencyBinCount);
+      let usedWorklet=false;
+      if (ctx.audioWorklet && root.Blob && root.URL && URL.createObjectURL) {
+        try {
+          let load=moduleLoads.get(ctx);
+          if(!load){const url=URL.createObjectURL(new Blob([workletSource()],{type:'application/javascript'}));load=ctx.audioWorklet.addModule(url).finally(()=>URL.revokeObjectURL(url));moduleLoads.set(ctx,load);load.catch(()=>moduleLoads.delete(ctx));}
+          await load;if(generation!==this._generation)return null;
+          const node=new AudioWorkletNode(ctx,'dynamics-bands',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]});
+          source.connect(node);this._worklet=node;
+          this._mute=ctx.createGain();this._mute.gain.value=0;node.connect(this._mute);this._mute.connect(ctx.destination);
+          node.port.onmessage=e=>{const d=e.data;if(d&&d.ready)return;if(!d||!d.levels||!d.onsets)return;this._emit(d.levels,d.onsets,d.time);node.port.postMessage(d,[d.levels.buffer,d.onsets.buffer]);};
+          usedWorklet=true;
+        } catch (_) { }
+      }
+      if(generation!==this._generation)return null;
+      if (!usedWorklet) {
+        this._fallbackTimer=root.setInterval(()=>this._fallback(),8);
+        return {degraded:true,reason:'AudioWorklet unavailable; using analyser fallback with higher latency.'};
+      }
+      return null;
+    }
+    _fallback() {
+      if(!this._analyser||!this._ctx)return;
+      this._analyser.getFloatFrequencyData(this._freq);
+      const edges=makeBandEdges(this._ctx.sampleRate,this._analyser.fftSize), levels=new Float32Array(BAND_COUNT);
+      for(let b=0;b<BAND_COUNT;b++){let sum=0,n=0;for(let k=edges[b];k<edges[b+1]&&k<this._freq.length;k++){sum+=Math.pow(10,this._freq[k]/20);n++;}levels[b]=Math.min(1,(sum/Math.max(1,n))*5);}
+      this._emit(levels,this._detect(levels,this._ctx.currentTime),this._ctx.currentTime);
+    }
+    _emit(levels,onsets,time) { const now=root.performance?.now()||Date.now();if(!this._reportStart)this._reportStart=now;this._reportCount++;if(now-this._reportStart>=500){this.analysisHz=this._reportCount*1000/(now-this._reportStart);this._reportCount=0;this._reportStart=now}this._lastLevels.set(levels); if(typeof this.onBands==='function')this.onBands({time:Number(time)||0,levels,onsets}); }
+    async inputDevices() {
+      if(!root.navigator||!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices)return [];
+      const devices=await navigator.mediaDevices.enumerateDevices();return devices.filter(d=>d.kind==='audioinput').map(d=>({deviceId:d.deviceId,label:d.label||'Microphone'}));
+    }
+    async playPause() { if(!this._media)return false;const ctx=await this._context();if(ctx.state!=='running')await ctx.resume();if(this._media.paused){await this._media.play();return true;}this._media.pause();return false; }
+    async stop() { this._generation++;this._releaseAll();this._kind='off';this.analysisHz=0;this._reportCount=0;this._reportStart=0;this.position=0;this.duration=0;this.file=null;this._state('off'); }
+    _releaseStream() { if(this._stream){for(const t of this._stream.getTracks())try{t.stop();}catch(_){}this._stream=null;}this._videoTrack=null; }
+    _releaseAll() {
+      if(this._fallbackTimer!==null){root.clearInterval(this._fallbackTimer);this._fallbackTimer=null;}
+      if(this._worklet){this._worklet.port.onmessage=null;try{this._worklet.disconnect();}catch(_){}this._worklet=null;}
+      if(this._mute){try{this._mute.disconnect();}catch(_){}this._mute=null;}
+      if(this._source){try{this._source.disconnect();}catch(_){}this._source=null;}
+      if(this._analyser){try{this._analyser.disconnect();}catch(_){}this._analyser=null;}
+      this._releaseStream();
+      if(this._media){this._media.pause();this._media.removeAttribute('src');try{this._media.load();}catch(_){}this._media=null;}
+      if(this._objectUrl){URL.revokeObjectURL(this._objectUrl);this._objectUrl=null;}
+    }
+    async dispose() { await this.stop();if(this._ctx&&this._ctx.state!=='closed')await this._ctx.close();this._ctx=null; }
+  }
+
+  DynamicsAudio.BAND_COUNT=BAND_COUNT;
+  DynamicsAudio.createBandDetector=createBandDetector;
+  DynamicsAudio.workletSource=workletSource;
+  if(typeof module!=='undefined'&&module.exports)module.exports=DynamicsAudio;
+  root.DynamicsAudio=DynamicsAudio;
+})(typeof window!=='undefined'?window:globalThis);
+
+/* Controller core, shared by Dynamic and Dynamic Pad. The Gamepad API covers Xbox, PlayStation, Switch Pro and most
+   generic pads on PC and Android; the Android shell adds native rumble and lights (DynamicNative.padRumble/padLight).
+
+   Two rumble motors become a two-way speaker. The heavy motor (left grip, big offset weight, ~20-60 Hz feel) plays the
+   bass: 35-160 Hz envelope plus a hard punch on every kick. The light motor (right grip) plays mids and treble plus
+   snares and hats. Each of the 24 bands is normalised to its own recent peak, so any song, mix or volume reaches the
+   full range, and a gate keeps silence still. Mode 2 (Beats) keeps only the punches; mode 3 (Touch) feels the brush. */
+const Feel={
+  peak:new Float32Array(24).fill(.02),lo:0,hi:0,punchL:0,punchH:0,strong:0,weak:0,t:0,beat:0,
+  /* Called at the analysis rate: ~375/s on the web worklet, ~125/s from the Android capture. */
+  bands(levels,onsets,mode){
+    const now=performance.now(),dt=clamp((now-(this.t||now))/1000,.001,.1);this.t=now;
+    let lo=0,hi=0,kl=0,kh=0;const fall=Math.exp(-dt/3);
+    for(let b=0;b<24;b++){
+      const l=levels[b],p=this.peak[b]=Math.max(l,this.peak[b]*fall,.006);
+      const n=clamp((l/p-.3)/.7,0,1)*clamp(l/.02,0,1);   // relative to its own peak, gated by absolute level
+      if(b<6){lo+=n/6;kl=Math.max(kl,onsets[b])}else if(b>=9){hi+=n/15;if(b>=12)kh=Math.max(kh,onsets[b])}
+    }
+    const att=1-Math.exp(-dt/.008),rel=1-Math.exp(-dt/.07);
+    this.lo+=(lo-this.lo)*(lo>this.lo?att:rel);this.hi+=(hi-this.hi)*(hi>this.hi?att:rel);
+    this.punchL=Math.max(this.punchL*Math.exp(-dt/.06),kl>0?Math.min(1,.55+kl):0);
+    this.punchH=Math.max(this.punchH*Math.exp(-dt/.035),kh>0?Math.min(1,.35+kh*.8):0);
+    this.beat=Math.max(this.punchL,this.beat*Math.exp(-dt/.15));
+    if(mode===2){this.strong=this.punchL;this.weak=this.punchH*.8}
+    else{this.strong=clamp(Math.pow(this.lo,1.4)*.85+this.punchL*.75,0,1);this.weak=clamp(Math.pow(this.hi,1.2)*.7+this.punchH*.5,0,1)}
+  },
+  silence(dt){this.lo*=Math.exp(-dt*12);this.hi*=Math.exp(-dt*12);this.punchL*=Math.exp(-dt*16);this.punchH*=Math.exp(-dt*16);this.strong*=Math.exp(-dt*16);this.weak*=Math.exp(-dt*16)}
+};
+
+const Pad={
+  index:-1,name:'',sent:0,lastS:-1,lastW:-1,quiet:true,prev:[],light:-1,
+  init(onChange){
+    this.onChange=onChange||(()=>{});
+    addEventListener('gamepadconnected',e=>{if(this.index<0)this.pick(e.gamepad);this.onChange()});
+    addEventListener('gamepaddisconnected',e=>{if(e.gamepad.index===this.index){this.index=-1;this.name='';this.scan()}this.onChange()});
+    this.scan();
+  },
+  scan(){for(const g of this.list())if(g){this.pick(g);break}},
+  list(){try{return navigator.getGamepads?[...navigator.getGamepads()]:[]}catch{return[]}},
+  pick(g){this.index=g.index;this.name=Pad.label(g.id);this.prev=g.buttons.map(b=>b.pressed)},
+  get(){if(this.index<0)this.scan();const g=this.index>=0?this.list()[this.index]:null;return g&&g.connected?g:null},
+  label(id){
+    if(/xbox|xinput|045e/i.test(id))return /360|028e/i.test(id)?'Xbox 360 controller':'Xbox controller';
+    if(/dualsense|0ce6/i.test(id))return'DualSense';if(/dualshock|05c4|09cc/i.test(id))return'DualShock 4';
+    if(/pro controller|2009/i.test(id))return'Switch Pro controller';return(id.replace(/\(.*?\)/g,'').trim()||'Controller').slice(0,40);
+  },
+  canRumble(){const g=this.get();return!!(NATIVE&&NATIVE.padRumble||g&&g.vibrationActuator)},
+  /* Drive the motors (0..1 each). Sent at most 60 times a second; each effect lasts 120 ms so a dropped frame never
+     leaves the pad silent, and the next update pre-empts it. */
+  rumble(strong,weak){
+    const now=performance.now();strong=clamp(strong,0,1);weak=clamp(weak,0,1);
+    const off=strong<.02&&weak<.02;
+    if(off&&this.quiet)return;
+    if(now-this.sent<16&&!off)return;
+    if(Math.abs(strong-this.lastS)<.015&&Math.abs(weak-this.lastW)<.015&&now-this.sent<80)return;
+    this.sent=now;this.lastS=strong;this.lastW=weak;this.quiet=off;
+    if(NATIVE&&NATIVE.padRumble){try{NATIVE.padRumble(strong,weak)}catch{}return}
+    const g=this.get(),a=g&&g.vibrationActuator;if(!a)return;
+    try{(off&&a.reset?a.reset():a.playEffect(a.type||'dual-rumble',{startDelay:0,duration:120,strongMagnitude:strong,weakMagnitude:weak})).catch(()=>{})}catch{}
+  },
+  tick(ms=30,s=.5,w=.8){const g=this.get();if(NATIVE&&NATIVE.padRumble){try{NATIVE.padRumble(s,w)}catch{}setTimeout(()=>{try{NATIVE.padRumble(0,0)}catch{}},ms);return}
+    const a=g&&g.vibrationActuator;if(a)try{a.playEffect(a.type||'dual-rumble',{duration:ms,strongMagnitude:s,weakMagnitude:w}).catch(()=>{})}catch{}},
+  /* Light bar / player LEDs: native on Android 12+ (DualSense, DualShock 4 and pads that expose lights). */
+  setLight(rgb){if(!(NATIVE&&NATIVE.padLight))return;const c=(255<<24|rgb[0]<<16|rgb[1]<<8|rgb[2])|0;if(c===this.light)return;this.light=c;try{NATIVE.padLight(c)}catch{}},
+  hasLight(){try{return!!(NATIVE&&NATIVE.padLightCount&&NATIVE.padLightCount()>0)}catch{return false}},
+  /* Edge-detected buttons for this frame: returns the indices pressed since the last call. */
+  pressed(g){const out=[];g.buttons.forEach((b,i)=>{if(b.pressed&&!this.prev[i])out.push(i)});this.prev=g.buttons.map(b=>b.pressed);return out}
+};
+
+/* Dynamic Pad: the controller as a music feeler. Audio analysis (worklet, ~375/s) drives the motors directly from
+   its callback, so rumble keeps time even when this page is not drawing. */
+const MODES=[['Music','Heavy motor plays the bass line and kicks, light motor plays mids, snares and hats.'],['Beats','Only the hits: a punch on every kick, a tap on every snare and hat.'],['Off','Motors stay still; meters keep showing what they would do.']];
+const cfg=Object.assign({mode:0,gain:1},store.get('dynamic.pad',{}));
+const audio=new DynamicsAudio();
+let live=0,native=false;
+const save=()=>store.set('dynamic.pad',cfg);
+function bands(levels,onsets){
+  live=performance.now();
+  Feel.bands(levels,onsets,cfg.mode===1?2:1);
+  if(cfg.mode!==2&&!native)Pad.rumble(Feel.strong*cfg.gain,Feel.weak*cfg.gain);
+  lastLevels=levels;
+}
+let lastLevels=new Float32Array(24);
+audio.onBands=d=>bands(d.levels,d.onsets);
+audio.onState=s=>{const ok=['mic','desktop','file','stream'].includes(s.state);
+  $('#status').textContent=s.state==='error'?s.detail:ok?{mic:'Listening to the microphone.',desktop:'Listening to the shared audio.',file:'Playing your file.',stream:'Playing the stream.'}[s.state]:'Pick a source. The heavy motor plays the bass, the light motor plays the treble.';
+  mark(ok?s.state:'off')};
+if(NATIVE){window.__nativeBands=(l,o)=>bands(l,o);window.__nativeAudio=(on,text)=>{native=on;$('#status').textContent=text;mark(on?'desktop':'off')}}
+
+const src=$('#src');
+const pick=(label,kind,fn)=>{const b=el('button');b.textContent=label;b.dataset.kind=kind;b.onclick=async()=>{try{await fn()}catch(e){notice(e.message)}};src.append(b)};
+const mark=k=>[...src.children].forEach(b=>b.classList.toggle('on',b.dataset.kind===k));
+pick('Off','off',()=>{if(NATIVE)NATIVE.stopPlaybackCapture();Pad.rumble(0,0);return audio.stop()});
+pick(NATIVE?'Phone audio':'PC / tab audio','desktop',()=>NATIVE?(audio.stop(),NATIVE.startPlaybackCapture()):audio.select('desktop'));
+pick('Microphone','mic',()=>{if(NATIVE)NATIVE.stopPlaybackCapture();return audio.select('mic')});
+pick('Music file','file',()=>$('#file').click());
+$('#file').onchange=e=>{const f=e.target.files[0];if(f){if(NATIVE)NATIVE.stopPlaybackCapture();audio.select('file',{file:f}).catch(x=>notice(x.message))}};
+mark('off');
+
+const mode=$('#mode');
+MODES.forEach(([n],i)=>{const b=el('button');b.textContent=n;b.onclick=()=>{cfg.mode=i;save();sync();if(i===2)Pad.rumble(0,0)};mode.append(b)});
+const gain=$('#gain');gain.value=cfg.gain;gain.oninput=()=>{cfg.gain=+gain.value;save();sync()};
+function sync(){if(NATIVE&&NATIVE.padConfig)NATIVE.padConfig([1,2,0][cfg.mode],cfg.gain);[...mode.children].forEach((b,i)=>b.classList.toggle('on',i===cfg.mode));$('#gainv').textContent=Math.round(cfg.gain*100)+'%';$('#modehelp').textContent=MODES[cfg.mode][1]}
+sync();
+$('#test').onclick=async()=>{const seq=[[1,0,350],[0,1,350],[0,0,150]];for(let k=0;k<6;k++)seq.push([1,.3,70],[0,0,180]);
+  for(const[s,w,ms]of seq){Pad.rumble(s,w);Pad.sent=0;await new Promise(r=>setTimeout(r,ms))}Pad.rumble(0,0)};
+
+const bandBox=$('#bands');for(let i=0;i<24;i++)bandBox.append(el('i'));
+Pad.init(()=>{const g=Pad.get();$('#pad').classList.toggle('on',!!g);$('#padname').textContent=g?Pad.name:'No controller yet';
+  $('#padhint').textContent=g?(Pad.canRumble()?'Rumble ready.':'This browser cannot drive its motors; try Chrome or Edge.')+(Pad.hasLight()?' Light bar follows the beat.':''):'Connect a controller and press any button.'});
+
+/* Background: a warm core that swells with the bass and a cool ring that shimmers with the treble. */
+const cv=$('#bg'),x=cv.getContext('2d');let last=performance.now();
+function frame(now){requestAnimationFrame(frame);const dt=Math.min(.1,(now-last)/1000);last=now;
+  if(now-live>250&&!native)Feel.silence(dt);
+  const dpr=Math.min(devicePixelRatio||1,2),w=cv.width=innerWidth*dpr,h=cv.height=innerHeight*dpr,r=Math.min(w,h);
+  x.fillStyle='#05060a';x.fillRect(0,0,w,h);x.globalCompositeOperation='lighter';
+  const cx=w/2,cy=h*.62,s=Feel.strong,t=Feel.weak;
+  let g=x.createRadialGradient(cx,cy,0,cx,cy,r*(.18+.35*s));g.addColorStop(0,`rgba(255,120,60,${.10+.5*s})`);g.addColorStop(1,'rgba(255,60,30,0)');x.fillStyle=g;x.fillRect(0,0,w,h);
+  x.lineWidth=(1.5+6*t)*dpr;x.strokeStyle=`rgba(90,215,255,${.08+.6*t})`;x.beginPath();x.arc(cx,cy,r*(.36+.04*t),0,TAU);x.stroke();
+  x.globalCompositeOperation='source-over';
+  for(const[id,v]of[['#lo',s],['#hi',t]]){const m=$(id);m.style.setProperty('--v',v.toFixed(3));m.querySelector('strong').textContent=Math.round(v*100)}
+  for(let i=0;i<24;i++){const p=Feel.peak[i]||1;bandBox.children[i].style.setProperty('--l',Math.min(1,lastLevels[i]/p).toFixed(3))}
+  const gp=Pad.get();if(gp)Pad.setLight([255,Math.round(120*(1-s)),Math.round(255*t)].map(v=>Math.round(v*(.2+.8*Math.max(s,t)))));
+}
+requestAnimationFrame(frame);
+
+</script>
+</body></html>

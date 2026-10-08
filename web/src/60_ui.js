@@ -164,7 +164,7 @@ UI={
     if(Engine.vel)Engine.setWrap(!!P.edges);
     this.sync();
   },
-  cycle(){const list=allPresets(),pool=list.map((p,i)=>i).filter(i=>favorites.size?favorites.has(list[i].n):list[i].c!=='Classic');const n=pool[(pool.indexOf(current)+1)%pool.length];applyPreset(n,{animate:true})},
+  cycle(d=1){const list=allPresets(),pool=list.map((p,i)=>i).filter(i=>favorites.size?favorites.has(list[i].n):list[i].c!=='Classic');let i=pool.indexOf(current);if(i<0)i=d>0?-1:0;const n=pool[(i+d+pool.length)%pool.length];applyPreset(n,{animate:true})},
   async share(){
     const code=await encodePreset(),link=/^https?:$/.test(location.protocol)?location.origin+location.pathname+'#p='+code:'';
     this.dialog('Share preset',d=>{const t=el('textarea');t.rows=4;t.readOnly=true;t.value=link||code;d.append(t);

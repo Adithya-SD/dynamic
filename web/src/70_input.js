@@ -42,8 +42,8 @@ const Input={
       if(d<1.5){p.t+=dt;if(p.t>.1)this.hold(p,dt,r);continue}
       p.t=p.h=0;
       const w=Math.ceil(d/Math.max(4,Math.sqrt(r)*VH()*.6)),k=Math.min(w,48),rs=r*Math.min(2.5,w/k),cs=Math.min(1,1.6/k);
-      const vx=dx/M*P.frc,vy=-dy/M*P.frc,sp=Math.hypot(vx,vy);
-      for(let i=1;i<=k;i++){const x=p.fx+dx*i/k,y=p.fy+dy*i/k;this.emit(x,y,vx/k,vy/k,inkColor(p.o,sp,x/VW(),1-y/VH(),p.id).map(z=>z*cs),rs)}
+      const pk=p.k||1,vx=dx/M*P.frc*pk,vy=-dy/M*P.frc*pk,sp=Math.hypot(vx,vy);
+      for(let i=1;i<=k;i++){const x=p.fx+dx*i/k,y=p.fy+dy*i/k;this.emit(x,y,vx/k,vy/k,inkColor(p.o,sp,x/VW(),1-y/VH(),p.id).map(z=>z*cs*Math.sqrt(pk)),rs)}
       p.fx=p.x;p.fy=p.y;
     }
     if(P.auto>0&&!App.paused)this.auto(dt,r);
@@ -89,7 +89,7 @@ const Music={
   },
   native:false,
   active(){return this.native||['mic','desktop','file','stream'].includes(audio.state)},
-  ingest(levels,onsets){this.levels.set(levels);this.last=performance.now();for(let b=0;b<24;b++)if(onsets[b]>0)this.events.push([b,onsets[b]]);if(this.events.length>256)this.events.splice(0,this.events.length-256)},
+  ingest(levels,onsets){this.levels.set(levels);const rm=P.rmode|0;Feel.bands(levels,onsets,rm);if((rm===1||rm===2)&&!this.native)Pad.rumble(Feel.strong*P.rgain,Feel.weak*P.rgain);this.last=performance.now();for(let b=0;b<24;b++)if(onsets[b]>0)this.events.push([b,onsets[b]]);if(this.events.length>256)this.events.splice(0,this.events.length-256)},
   frame(dt){
     const live=performance.now()-this.last<250;
     if(!live)for(let i=0;i<24;i++)this.levels[i]*=Math.exp(-dt*8);

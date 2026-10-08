@@ -101,6 +101,9 @@
     {"k":"aspace","tab":"music","g":"Music moves","l":"Space","min":0,"max":1,"st":0.01,"d":0.5},
     {"k":"afield","tab":"music","g":"Music moves","l":"Field","min":0,"max":1,"st":0.01,"d":0.5},
     {"k":"aglow","tab":"music","g":"Music moves","l":"Glow","min":0,"max":1,"st":0.01,"d":0.4},
+    {"k":"rmode","tab":"music","g":"Controller","l":"Rumble","t":"c","o":["Off","Music","Beats","Touch"],"d":1,"preset":false,"help":"Music: heavy motor plays the bass, light motor the treble. Beats: only kicks and snares. Touch: feel your strokes."},
+    {"k":"rgain","tab":"music","g":"Controller","l":"Rumble strength","min":0,"max":2,"st":0.05,"d":1,"preset":false},
+    {"k":"padspd","tab":"music","g":"Controller","l":"Stick speed","min":0.3,"max":3,"st":0.05,"d":1,"preset":false},
 
     {"k":"rscale","tab":"system","g":"Quality","l":"Resolution","min":0.5,"max":1.5,"st":0.05,"d":1,"u":"×","preset":false,"quality":true},
     {"k":"sim","tab":"system","g":"Quality","l":"Simulation cells","min":96,"max":512,"st":32,"d":256,"preset":false,"quality":true},

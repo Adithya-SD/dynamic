@@ -46,7 +46,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * This shell adds what a browser tab cannot do: hear other apps' audio, read Spotify's session, vibrate,
  * save files to the gallery, and share presets through the system share sheet.
  */
-class MainActivity : Activity() {
+open class MainActivity : Activity() {
+    /** Page to load; Dynamic Pad overrides it. */
+    protected open val page = "index.html"
+    /** Dynamic Pad keeps listening (and rumbling) when the screen is off or another app is in front. */
+    protected open val keepAudio = false
+
     private lateinit var web: WebView
     private val main = Handler(Looper.getMainLooper())
     private var chooser: ValueCallback<Array<Uri>>? = null
@@ -111,7 +116,7 @@ class MainActivity : Activity() {
         setContentView(web)
         immersive()
         acceptIntent(intent)
-        web.loadUrl("file:///android_asset/index.html")
+        web.loadUrl("file:///android_asset/$page")
     }
 
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); acceptIntent(intent) }
@@ -160,12 +165,13 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() {
-        stopCapture()
+        if (!keepAudio) stopCapture()
         super.onStop()
     }
 
     override fun onDestroy() {
         stopCapture()
+        PadOut.release()
         web.destroy()
         super.onDestroy()
     }
@@ -247,6 +253,7 @@ class MainActivity : Activity() {
 
     /** Called ~375 times a second from the capture thread; every third report is forwarded (about 125 Hz). */
     private fun report(levels: FloatArray, onsets: FloatArray) {
+        PadOut.feed(levels, onsets)   // controller rumble at the full analysis rate, independent of the page
         for (b in 0 until 24) { batch[b] = levels[b]; if (onsets[b] > batchOnsets[b]) batchOnsets[b] = onsets[b] }
         if (++batchCount < 3) return
         batchCount = 0
@@ -315,6 +322,13 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface fun stopPlaybackCapture() = runOnUiThread { stopCapture() }
+
+        @JavascriptInterface fun padRumble(strong: Float, weak: Float) = PadOut.rumble(strong, weak)
+        @JavascriptInterface fun padLight(argb: Int) = PadOut.light(argb)
+        @JavascriptInterface fun padLightCount(): Int = PadOut.lightCount()
+        @JavascriptInterface fun padName(): String = PadOut.name()
+        /** mode 0 off, 1 music, 2 beats: used by the native rumble that runs while phone audio is captured. */
+        @JavascriptInterface fun padConfig(mode: Int, gain: Float) { PadOut.mode = mode; PadOut.gain = gain }
 
         @JavascriptInterface fun spotify(action: String, positionMs: Long) { NowPlayingService.command(action, positionMs) }
 

@@ -8,7 +8,7 @@ const App={
     Engine.init();restore();Engine.wrap=!!P.edges;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
-    UI.build();Input.init();Music.init();
+    UI.build();Input.init();Music.init();PadPlay.init();
     Space.update(P,0,Engine.res,Engine.world,0);
     const bar=$('#boot i');
     const errors=await Engine.warm((n,total)=>{if(bar)bar.style.setProperty('--p',n/total)});
@@ -39,6 +39,7 @@ const App={
     Music.frame(dt);
     const beat=Music.beat,energy=Music.energy;
     Space.update(P,this.paused?0:dt,Engine.res,Engine.world,P.aspace*(energy*1.5+beat*2));
+    PadPlay.frame(dt);
     Input.frame(dt);
     UI.depositStep();
     Engine.flushStamps(P.bt);
