@@ -102,6 +102,7 @@
     {"k":"afield","tab":"music","g":"Music moves","l":"Field","min":0,"max":1,"st":0.01,"d":0.5},
     {"k":"aglow","tab":"music","g":"Music moves","l":"Glow","min":0,"max":1,"st":0.01,"d":0.4},
     {"k":"rmode","tab":"music","g":"Controller","l":"Rumble","t":"c","o":["Off","Music","Beats","Touch"],"d":1,"preset":false,"help":"Music: heavy motor plays the bass, light motor the treble. Beats: only kicks and snares. Touch: feel your strokes."},
+    {"k":"rhi","tab":"music","g":"Controller","l":"Light motor","t":"c","o":["Treble","Bass","Off"],"d":0,"preset":false,"help":"What the right-grip motor plays. Bass doubles the kick; Off keeps it still."},
     {"k":"rgain","tab":"music","g":"Controller","l":"Rumble strength","min":0,"max":2,"st":0.05,"d":1,"preset":false},
     {"k":"padspd","tab":"music","g":"Controller","l":"Stick speed","min":0.3,"max":3,"st":0.05,"d":1,"preset":false},
 

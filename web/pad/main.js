@@ -1,13 +1,13 @@
 /* Dynamic Pad: the controller as a music feeler. Audio analysis (worklet, ~375/s) drives the motors directly from
    its callback, so rumble keeps time even when this page is not drawing. */
 const MODES=[['Music','Heavy motor plays the bass line and kicks, light motor plays mids, snares and hats.'],['Beats','Only the hits: a punch on every kick, a tap on every snare and hat.'],['Off','Motors stay still; meters keep showing what they would do.']];
-const cfg=Object.assign({mode:0,gain:1},store.get('dynamic.pad',{}));
+const cfg=Object.assign({mode:0,gain:1,hi:0},store.get('dynamic.pad',{}));
 const audio=new DynamicsAudio();
 let live=0,native=false;
 const save=()=>store.set('dynamic.pad',cfg);
 function bands(levels,onsets){
   live=performance.now();
-  Feel.bands(levels,onsets,cfg.mode===1?2:1);
+  Feel.bands(levels,onsets,cfg.mode===1?2:1,cfg.hi);
   if(cfg.mode!==2&&!native)Pad.rumble(Feel.strong*cfg.gain,Feel.weak*cfg.gain);
   lastLevels=levels;
 }
@@ -30,8 +30,9 @@ mark('off');
 
 const mode=$('#mode');
 MODES.forEach(([n],i)=>{const b=el('button');b.textContent=n;b.onclick=()=>{cfg.mode=i;save();sync();if(i===2)Pad.rumble(0,0)};mode.append(b)});
+const hiRow=$('#hirow');['Treble','Bass','Off'].forEach((n,i)=>{const b=el('button');b.textContent=n;b.onclick=()=>{cfg.hi=i;save();sync()};hiRow.append(b)});
 const gain=$('#gain');gain.value=cfg.gain;gain.oninput=()=>{cfg.gain=+gain.value;save();sync()};
-function sync(){if(NATIVE&&NATIVE.padConfig)NATIVE.padConfig([1,2,0][cfg.mode],cfg.gain);[...mode.children].forEach((b,i)=>b.classList.toggle('on',i===cfg.mode));$('#gainv').textContent=Math.round(cfg.gain*100)+'%';$('#modehelp').textContent=MODES[cfg.mode][1]}
+function sync(){if(NATIVE&&NATIVE.padConfig)NATIVE.padConfig([1,2,0][cfg.mode],cfg.gain,cfg.hi);[...hiRow.children].forEach((b,i)=>b.classList.toggle('on',i===cfg.hi));[...mode.children].forEach((b,i)=>b.classList.toggle('on',i===cfg.mode));$('#gainv').textContent=Math.round(cfg.gain*100)+'%';$('#modehelp').textContent=MODES[cfg.mode][1]}
 sync();
 $('#test').onclick=async()=>{const seq=[[1,0,350],[0,1,350],[0,0,150]];for(let k=0;k<6;k++)seq.push([1,.3,70],[0,0,180]);
   for(const[s,w,ms]of seq){Pad.rumble(s,w);Pad.sent=0;await new Promise(r=>setTimeout(r,ms))}Pad.rumble(0,0)};

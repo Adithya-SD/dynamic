@@ -21,6 +21,7 @@ import kotlin.math.pow
 object PadOut {
     @Volatile var mode = 1          // 0 off, 1 music, 2 beats
     @Volatile var gain = 1f
+    @Volatile var hiMode = 0      // light motor: 0 treble, 1 bass, 2 off
     private var device: InputDevice? = null
     private var checked = 0L
     private var lastSend = 0L
@@ -103,24 +104,29 @@ object PadOut {
         private var t = 0L
         var lo = 0f; var hi = 0f; var punchL = 0f; var punchH = 0f; var strong = 0f; var weak = 0f; var beat = 0f
 
-        @Synchronized fun bands(levels: FloatArray, onsets: FloatArray, mode: Int) {
+        @Synchronized fun bands(levels: FloatArray, onsets: FloatArray, mode: Int, hiMode: Int) {
             val now = SystemClock.elapsedRealtimeNanos()
             val dt = if (t == 0L) .003f else ((now - t) / 1e9f).coerceIn(.001f, .1f); t = now
-            val fall = exp(-dt / 3f)
+            val fall = exp(-dt / 8f)
             var l = 0f; var h = 0f; var kl = 0f; var kh = 0f
             for (b in 0 until 24) {
                 val v = levels[b]
                 val p = max(max(v, peak[b] * fall), .006f); peak[b] = p
-                val n = ((v / p - .3f) / .7f).coerceIn(0f, 1f) * (v / .02f).coerceIn(0f, 1f)
+                val n = ((v / p - .5f) / .5f).coerceIn(0f, 1f) * ((v - .015f) / .03f).coerceIn(0f, 1f)
                 if (b < 6) { l += n / 6; kl = max(kl, onsets[b]) } else if (b >= 9) { h += n / 15; if (b >= 12) kh = max(kh, onsets[b]) }
             }
-            val att = 1 - exp(-dt / .008f); val rel = 1 - exp(-dt / .07f)
+            val att = 1 - exp(-dt / .008f); val rel = 1 - exp(-dt / .03f)
             lo += (l - lo) * (if (l > lo) att else rel); hi += (h - hi) * (if (h > hi) att else rel)
-            punchL = max(punchL * exp(-dt / .06f), if (kl > 0) min(1f, .55f + kl) else 0f)
-            punchH = max(punchH * exp(-dt / .035f), if (kh > 0) min(1f, .35f + kh * .8f) else 0f)
+            punchL = max(punchL * exp(-dt / .04f), if (kl > .15f) min(1f, .5f + kl) else 0f)
+            punchH = max(punchH * exp(-dt / .025f), if (kh > .2f) min(1f, .3f + kh * .8f) else 0f)
             beat = max(punchL, beat * exp(-dt / .15f))
-            if (mode == 2) { strong = punchL; weak = punchH * .8f }
-            else { strong = (lo.pow(1.4f) * .85f + punchL * .75f).coerceIn(0f, 1f); weak = (hi.pow(1.2f) * .7f + punchH * .5f).coerceIn(0f, 1f) }
+            strong = if (mode == 2) punchL else (lo * lo * .8f + punchL * .8f).coerceIn(0f, 1f)
+            weak = when {
+                hiMode == 2 -> 0f
+                hiMode == 1 -> strong * .7f
+                mode == 2 -> punchH * .8f
+                else -> (hi.pow(1.6f) * .7f + punchH * .5f).coerceIn(0f, 1f)
+            }
         }
     }
 
@@ -128,7 +134,7 @@ object PadOut {
     fun feed(levels: FloatArray, onsets: FloatArray) {
         val m = mode
         if (m == 0) return
-        Feel.bands(levels, onsets, m)
+        Feel.bands(levels, onsets, m, hiMode)
         rumble(Feel.strong * gain, Feel.weak * gain)
     }
 }

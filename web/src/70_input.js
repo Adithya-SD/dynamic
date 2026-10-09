@@ -89,7 +89,7 @@ const Music={
   },
   native:false,
   active(){return this.native||['mic','desktop','file','stream'].includes(audio.state)},
-  ingest(levels,onsets){this.levels.set(levels);const rm=P.rmode|0;Feel.bands(levels,onsets,rm);if((rm===1||rm===2)&&!this.native)Pad.rumble(Feel.strong*P.rgain,Feel.weak*P.rgain);this.last=performance.now();for(let b=0;b<24;b++)if(onsets[b]>0)this.events.push([b,onsets[b]]);if(this.events.length>256)this.events.splice(0,this.events.length-256)},
+  ingest(levels,onsets){this.levels.set(levels);const rm=P.rmode|0;Feel.bands(levels,onsets,rm,P.rhi|0);if((rm===1||rm===2)&&!this.native)Pad.rumble(Feel.strong*P.rgain,Feel.weak*P.rgain);this.last=performance.now();for(let b=0;b<24;b++)if(onsets[b]>0)this.events.push([b,onsets[b]]);if(this.events.length>256)this.events.splice(0,this.events.length-256)},
   frame(dt){
     const live=performance.now()-this.last<250;
     if(!live)for(let i=0;i<24;i++)this.levels[i]*=Math.exp(-dt*8);

@@ -8,21 +8,22 @@
 const Feel={
   peak:new Float32Array(24).fill(.02),lo:0,hi:0,punchL:0,punchH:0,strong:0,weak:0,t:0,beat:0,
   /* Called at the analysis rate: ~375/s on the web worklet, ~125/s from the Android capture. */
-  bands(levels,onsets,mode){
+  /* hiMode: what the light motor plays. 0 treble, 1 bass (doubles the heavy motor), 2 nothing. */
+  bands(levels,onsets,mode,hiMode=0){
     const now=performance.now(),dt=clamp((now-(this.t||now))/1000,.001,.1);this.t=now;
-    let lo=0,hi=0,kl=0,kh=0;const fall=Math.exp(-dt/3);
+    let lo=0,hi=0,kl=0,kh=0;const fall=Math.exp(-dt/8);
     for(let b=0;b<24;b++){
       const l=levels[b],p=this.peak[b]=Math.max(l,this.peak[b]*fall,.006);
-      const n=clamp((l/p-.3)/.7,0,1)*clamp(l/.02,0,1);   // relative to its own peak, gated by absolute level
+      const n=clamp((l/p-.5)/.5,0,1)*clamp((l-.015)/.03,0,1);   // top half of its own 8 s peak, gated by absolute level
       if(b<6){lo+=n/6;kl=Math.max(kl,onsets[b])}else if(b>=9){hi+=n/15;if(b>=12)kh=Math.max(kh,onsets[b])}
     }
-    const att=1-Math.exp(-dt/.008),rel=1-Math.exp(-dt/.07);
+    const att=1-Math.exp(-dt/.008),rel=1-Math.exp(-dt/.03);
     this.lo+=(lo-this.lo)*(lo>this.lo?att:rel);this.hi+=(hi-this.hi)*(hi>this.hi?att:rel);
-    this.punchL=Math.max(this.punchL*Math.exp(-dt/.06),kl>0?Math.min(1,.55+kl):0);
-    this.punchH=Math.max(this.punchH*Math.exp(-dt/.035),kh>0?Math.min(1,.35+kh*.8):0);
+    this.punchL=Math.max(this.punchL*Math.exp(-dt/.04),kl>.15?Math.min(1,.5+kl):0);
+    this.punchH=Math.max(this.punchH*Math.exp(-dt/.025),kh>.2?Math.min(1,.3+kh*.8):0);
     this.beat=Math.max(this.punchL,this.beat*Math.exp(-dt/.15));
-    if(mode===2){this.strong=this.punchL;this.weak=this.punchH*.8}
-    else{this.strong=clamp(Math.pow(this.lo,1.4)*.85+this.punchL*.75,0,1);this.weak=clamp(Math.pow(this.hi,1.2)*.7+this.punchH*.5,0,1)}
+    this.strong=mode===2?this.punchL:clamp(this.lo*this.lo*.8+this.punchL*.8,0,1);
+    this.weak=hiMode===2?0:hiMode===1?this.strong*.7:mode===2?this.punchH*.8:clamp(Math.pow(this.hi,1.6)*.7+this.punchH*.5,0,1);
   },
   silence(dt){this.lo*=Math.exp(-dt*12);this.hi*=Math.exp(-dt*12);this.punchL*=Math.exp(-dt*16);this.punchH*=Math.exp(-dt*16);this.strong*=Math.exp(-dt*16);this.weak*=Math.exp(-dt*16)}
 };

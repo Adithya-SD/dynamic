@@ -328,7 +328,7 @@ open class MainActivity : Activity() {
         @JavascriptInterface fun padLightCount(): Int = PadOut.lightCount()
         @JavascriptInterface fun padName(): String = PadOut.name()
         /** mode 0 off, 1 music, 2 beats: used by the native rumble that runs while phone audio is captured. */
-        @JavascriptInterface fun padConfig(mode: Int, gain: Float) { PadOut.mode = mode; PadOut.gain = gain }
+        @JavascriptInterface fun padConfig(mode: Int, gain: Float, hi: Int) { PadOut.mode = mode; PadOut.gain = gain; PadOut.hiMode = hi }
 
         @JavascriptInterface fun spotify(action: String, positionMs: Long) { NowPlayingService.command(action, positionMs) }
 

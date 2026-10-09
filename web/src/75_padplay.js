@@ -29,8 +29,8 @@ const PadPlay={
     const used=this.idle[0]<3||this.idle[1]<3;if(used!==!!this.shown){this.shown=used?1:0;this.dots.forEach(d=>d.classList.toggle('on',used))}
     if(std)for(const b of Pad.pressed(g))this.button(b);
     // Music rumble is sent from the analysis callback (Music.ingest) at audio rate; here only silence and Touch mode.
-    const mode=P.rmode|0,gain=P.rgain,conf=(mode===1||mode===2?mode:0)+'/'+gain;
-    if(NATIVE&&NATIVE.padConfig&&conf!==this.conf){this.conf=conf;NATIVE.padConfig(mode===1||mode===2?mode:0,gain)}
+    const mode=P.rmode|0,gain=P.rgain,conf=(mode===1||mode===2?mode:0)+'/'+gain+'/'+(P.rhi|0);
+    if(NATIVE&&NATIVE.padConfig&&conf!==this.conf){this.conf=conf;NATIVE.padConfig(mode===1||mode===2?mode:0,gain,P.rhi|0)}
     if(!Music.active())Feel.silence(dt);
     if(mode===0)Pad.rumble(0,0);
     else if(mode===3||!Music.active())Pad.rumble(touch*.5*gain,touch*.8*gain);
