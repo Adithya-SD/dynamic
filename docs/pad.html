@@ -84,199 +84,480 @@ let noteTimer=0;
 function notice(text,ms=5000){const n=$('#note');n.textContent=text;n.hidden=false;UI&&(UI.layoutDirty=true);clearTimeout(noteTimer);noteTimer=setTimeout(()=>{n.hidden=true;UI&&(UI.layoutDirty=true)},ms)}
 var UI=null;
 
-/* Standalone browser audio capture and 24-band onset analysis. */
+/* Browser audio capture and analysis.
+   Audio thread (AudioWorklet): analysisCore() runs a 2048-point FFT every 128 samples (~375 frames/s) and reports
+   24 log-spaced band levels plus a spectral-flux onset signal in four ranges (full, low, mid, high).
+   Main thread: createSignal() adds automatic gain (quiet microphones and loud masters reach the same range) and
+   per-band onsets; BeatTracker (42_beat.js) turns the onset signal into tempo, phase and predicted beats.
+   analysisCore and createSignal are plain functions so node tests (tools/beat_test.mjs) run the exact same code. */
 (function (root) {
   'use strict';
 
   const BAND_COUNT = 24;
-  const FFT_SIZE = 2048;
-  const HOP_SIZE = 128;
-  const MIN_HZ = 35;
-  const MAX_HZ = 16000;
+  const FRAME = 29; // 24 levels, 4 onset ranges, time
 
-  function makeBandEdges(sampleRate, fftSize) {
-    const hi = Math.min(MAX_HZ, sampleRate / 2);
+  function analysisCore(sampleRate) {
+    const N = 2048, MASK = N - 1, LAG = 4, GAMMA = .02; // gentle log compression: loud kicks still outweigh off-beat bass and hats
+    const ring = new Float32Array(N), re = new Float32Array(N), im = new Float32Array(N), win = new Float32Array(N);
+    const rev = new Uint16Array(N), cs = new Float32Array(N / 2), sn = new Float32Array(N / 2);
+    for (let i = 0; i < N; i++) { win[i] = .5 - .5 * Math.cos(2 * Math.PI * i / (N - 1)); let x = i, r = 0; for (let b = 0; b < 11; b++) { r = (r << 1) | (x & 1); x >>= 1; } rev[i] = r; }
+    for (let i = 0; i < N / 2; i++) { const a = -2 * Math.PI * i / N; cs[i] = Math.cos(a); sn[i] = Math.sin(a); }
+    const bin = f => Math.max(1, Math.min(N / 2 - 1, Math.round(f * N / sampleRate)));
+    const top = Math.min(16000, sampleRate * .475), K = bin(top) + 1, kLow = bin(180), kMid = bin(2500);
     const edges = new Uint16Array(BAND_COUNT + 1);
-    const maxBin = fftSize / 2;
-    for (let i = 0; i <= BAND_COUNT; i++) {
-      const hz = MIN_HZ * Math.pow(hi / MIN_HZ, i / BAND_COUNT);
-      edges[i] = Math.min(maxBin, Math.max(1, Math.round(hz * fftSize / sampleRate)));
-    }
-    return edges;
-  }
-
-  // Kept pure/exported so onset behavior can be tested without browser APIs.
-  function createBandDetector() {
-    const previous = new Float32Array(BAND_COUNT);
-    const average = new Float32Array(BAND_COUNT);
-    const cooldown = new Float64Array(BAND_COUNT);
-    cooldown.fill(-1e9);
-    return function detect(levels, time, out) {
-      out = out || new Float32Array(BAND_COUNT);
-      out.fill(0);
-      for (let i = 0; i < BAND_COUNT; i++) {
-        const level = Math.max(0, levels[i] || 0);
-        const flux = Math.max(0, level - previous[i]);
-        const threshold = Math.max(0.025, average[i] * 1.8);
-        if (flux > threshold && level > 0.035 && time - cooldown[i] >= 0.035) {
-          out[i] = Math.min(1, flux * 3.2);
-          cooldown[i] = time;
+    for (let i = 0; i <= BAND_COUNT; i++) edges[i] = Math.max(1, Math.min(N / 2, Math.round(35 * Math.pow(top / 35, i / BAND_COUNT) * N / sampleRate)));
+    // Log magnitudes of the last LAG frames: flux compares against the frame ~10 ms back, with a 3-bin max filter
+    // so vibrato and slides do not read as onsets.
+    const hist = []; for (let i = 0; i < LAG; i++) hist.push(new Float32Array(K));
+    const mag = new Float32Array(K), levels = new Float32Array(BAND_COUNT), odf = new Float32Array(4);
+    let write = 0, slot = 0;
+    return {
+      levels, odf,
+      process(input) {
+        for (let j = 0; j < input.length; j++) { ring[write] = input[j]; write = (write + 1) & MASK; }
+        for (let i = 0; i < N; i++) { const q = rev[i]; re[q] = ring[(write + i) & MASK] * win[i]; im[q] = 0; }
+        for (let len = 2; len <= N; len <<= 1) {
+          const h = len >> 1, stride = N / len;
+          for (let base = 0; base < N; base += len) for (let k = 0; k < h; k++) {
+            const t = k * stride, wr = cs[t], wi = sn[t], a = base + k, b = a + h, vr = re[b] * wr - im[b] * wi, vi = re[b] * wi + im[b] * wr;
+            re[b] = re[a] - vr; im[b] = im[a] - vi; re[a] += vr; im[a] += vi;
+          }
         }
-        average[i] = average[i] * 0.92 + flux * 0.08;
-        previous[i] = level;
+        for (let b = 0; b < BAND_COUNT; b++) {
+          let s = 0, a = edges[b], e = edges[b + 1]; if (e <= a) e = a + 1;
+          for (let k = a; k < e && k < N / 2; k++) s += re[k] * re[k] + im[k] * im[k];
+          levels[b] = Math.sqrt(s) / 1024 * 4;
+        }
+        const old = hist[slot];
+        let fl = 0, fm = 0, fh = 0;
+        for (let k = 1; k < K; k++) { mag[k] = Math.log(1 + GAMMA * Math.sqrt(re[k] * re[k] + im[k] * im[k])); }
+        for (let k = 1; k < K - 1; k++) {
+          const d = mag[k] - Math.max(old[k - 1], old[k], old[k + 1]);
+          if (d > 0) { if (k < kLow) fl += d; else if (k < kMid) fm += d; else fh += d; }
+        }
+        old.set(mag); slot = (slot + 1) % LAG;
+        odf[0] = fl + fm + fh; odf[1] = fl; odf[2] = fm; odf[3] = fh;
       }
-      return out;
     };
   }
 
-  const moduleLoads = new WeakMap();
-  function workletSource() {
-    return `class DynamicsBandsProcessor extends AudioWorkletProcessor {
-      constructor() {
-        super(); this.n=2048; this.hop=128; this.ring=new Float32Array(this.n); this.write=0; this.since=0;
-        this.re=new Float32Array(this.n); this.im=new Float32Array(this.n); this.window=new Float32Array(this.n);this.reverse=new Uint16Array(this.n);this.cosine=new Float32Array(this.n/2);this.sine=new Float32Array(this.n/2);
-        for(let i=0;i<this.n;i++){this.window[i]=0.5-0.5*Math.cos(6.283185307179586*i/(this.n-1));let x=i,r=0;for(let b=0;b<11;b++){r=(r<<1)|(x&1);x>>=1;}this.reverse[i]=r;}
-        for(let i=0;i<this.n/2;i++){const a=-6.283185307179586*i/this.n;this.cosine[i]=Math.cos(a);this.sine[i]=Math.sin(a);}
-        this.lastAnalysisTime=0;this.report=0;this.edges=new Uint16Array(25);
-        for(let i=0;i<=24;i++){const hz=35*Math.pow(Math.min(16000,sampleRate/2)/35,i/24);this.edges[i]=Math.max(1,Math.round(hz*this.n/sampleRate));}
-        this.prev=new Float32Array(24);this.avg=new Float32Array(24);this.cool=new Float64Array(24);this.cool.fill(-1e9);
-        this.pool=[];for(let i=0;i<16;i++)this.pool.push({levels:new Float32Array(24),onsets:new Float32Array(24)});
-        this.port.onmessage=e=>{if(e.data&&e.data.levels&&e.data.onsets)this.pool.push(e.data);};
-        this.port.postMessage({ready:true});
+  /* Main-thread conditioning shared by every source (web worklet, analyser fallback, Android capture).
+     push(raw levels, time, odf?) → normalised levels (loudest band ≈ .8 of its 5 s peak), per-band onsets, odf. */
+  function createSignal() {
+    const prev = new Float32Array(BAND_COUNT), avg = new Float32Array(BAND_COUNT), cool = new Float64Array(BAND_COUNT).fill(-1e9);
+    const levels = new Float32Array(BAND_COUNT), onsets = new Float32Array(BAND_COUNT), lprev = new Float32Array(BAND_COUNT), odf = new Float32Array(4);
+    let ref = .02, last = 0;
+    return {
+      levels, onsets, odf, gain: 1, loud: 0,
+      push(raw, time, rawOdf) {
+        const dt = last ? Math.min(.1, Math.max(.001, time - last)) : 1 / 375; last = time;
+        let mx = 0; for (let b = 0; b < BAND_COUNT; b++) mx = Math.max(mx, raw[b] || 0);
+        ref = Math.max(mx, ref * Math.exp(-dt / 5), .003);   // instant attack, 5 s release, floor keeps silence quiet
+        const g = .8 / ref, fluxScale = (512 / 48000) / dt, retain = Math.pow(.92, dt / (512 / 48000));
+        this.gain = g; this.loud = mx;
+        for (let b = 0; b < BAND_COUNT; b++) {
+          const level = Math.min(1.5, (raw[b] || 0) * g), flux = Math.max(0, level - prev[b]) * fluxScale;
+          const threshold = Math.max(.025, avg[b] * 1.8);
+          onsets[b] = flux > threshold && level > .05 && time - cool[b] >= .035 ? Math.min(1, flux * 3.2) : 0;
+          if (onsets[b]) cool[b] = time;
+          avg[b] = avg[b] * retain + flux * (1 - retain); prev[b] = level; levels[b] = level;
+        }
+        if (rawOdf) odf.set(rawOdf);
+        else {   // no spectrum (Android capture, analyser fallback): flux of the log band levels
+          let f = [0, 0, 0];
+          for (let b = 0; b < BAND_COUNT; b++) { const v = Math.log(1 + 40 * levels[b]), d = v - lprev[b]; lprev[b] = v; if (d > 0) f[b < 5 ? 0 : b < 15 ? 1 : 2] += d; }
+          odf[0] = f[0] + f[1] + f[2]; odf[1] = f[0]; odf[2] = f[1]; odf[3] = f[2];
+        }
+        return this;
       }
-      process(inputs) {
-        const input=inputs[0]&&inputs[0][0]; if(!input)return true;
-        for(let j=0;j<input.length;j++){this.ring[this.write]=input[j];this.write=(this.write+1)&2047;this.since++;}
-        this.report+=input.length;if(this.report<this.hop)return true;this.report-=this.hop;this.since=0;
-        const item=this.pool.pop();if(!item)return true;const interval=Math.max(this.hop/sampleRate,currentTime-this.lastAnalysisTime),fluxScale=(512/sampleRate)/interval,retain=Math.pow(.92,interval*sampleRate/512);this.lastAnalysisTime=currentTime;
-        // Persistent FFT buffers, Hann window, bit-reversal order and twiddles avoid per-block allocation/trig.
-        for(let i=0;i<this.n;i++){const q=this.reverse[i],x=this.ring[(this.write+i)&2047]*this.window[i];this.re[q]=x;this.im[q]=0;}
-        for(let len=2;len<=this.n;len<<=1){const stride=this.n/len;for(let base=0;base<this.n;base+=len){for(let k=0;k<len/2;k++){const ti=k*stride,wr=this.cosine[ti],wi=this.sine[ti],a=base+k,b=a+len/2,vr=this.re[b]*wr-this.im[b]*wi,vi=this.re[b]*wi+this.im[b]*wr;this.re[b]=this.re[a]-vr;this.im[b]=this.im[a]-vi;this.re[a]+=vr;this.im[a]+=vi;}}}
-        
-        for(let b=0;b<24;b++){let sum=0,start=this.edges[b],end=this.edges[b+1];if(end<=start){start=Math.min(1023,Math.max(1,start));end=start+1;}for(let k=start;k<end&&k<1024;k++){const re=this.re[k],im=this.im[k];sum+=re*re+im*im;}const level=Math.min(1,Math.sqrt(sum)/1024*4);const flux=Math.max(0,level-this.prev[b])*fluxScale;const threshold=Math.max(0.025,this.avg[b]*1.8);item.onsets[b]=flux>threshold&&level>0.035&&currentTime-this.cool[b]>=0.035?Math.min(1,flux*3.2):0;if(item.onsets[b])this.cool[b]=currentTime;this.avg[b]=this.avg[b]*retain+flux*(1-retain);this.prev[b]=level;item.levels[b]=level;}
-        item.time=currentTime;this.port.postMessage(item,[item.levels.buffer,item.onsets.buffer]); return true;
-      }
-    } registerProcessor('dynamics-bands',DynamicsBandsProcessor);`;
+    };
   }
+
+  function workletSource() {
+    return `const analysisCore=${analysisCore.toString()};const BAND_COUNT=${BAND_COUNT};
+    class DynamicsAnalysis extends AudioWorkletProcessor{
+      constructor(){super();this.core=analysisCore(sampleRate);this.buf=new Float32Array(128);this.n=0;this.pool=[];
+        for(let i=0;i<16;i++)this.pool.push(new Float32Array(${FRAME}));
+        this.port.onmessage=e=>{if(e.data instanceof Float32Array)this.pool.push(e.data)};this.port.postMessage({ready:true})}
+      process(inputs){
+        const ch=inputs[0];if(!ch||!ch[0])return true;const a=ch[0],b=ch[1],n=a.length;
+        for(let j=0;j<n;j++){this.buf[this.n++]=b?(a[j]+b[j])*.5:a[j];
+          if(this.n===128){this.n=0;this.core.process(this.buf);const it=this.pool.pop();
+            if(it){it.set(this.core.levels,0);it.set(this.core.odf,24);it[28]=currentTime+(j+1)/sampleRate;this.port.postMessage(it,[it.buffer])}}}
+        return true}
+    }
+    registerProcessor('dynamic-analysis',DynamicsAnalysis);`;
+  }
+
+  const moduleLoads = new WeakMap();
+  const KINDS = ['off', 'mic', 'desktop', 'file', 'stream'];
 
   class DynamicsAudio {
     constructor() {
-      this.onState = null;
-      this.onBands = null;this.analysisHz=0;this._reportCount=0;this._reportStart=0;
-      this.state = 'off';
-      this.position = 0;
-      this.duration = 0;
-      this.file = null;
+      this.onState = null; this.onBands = null; this.analysisHz = 0; this._reportCount = 0; this._reportStart = 0;
+      this.state = 'off'; this.position = 0; this.duration = 0; this.file = null; this.signal = createSignal();
       this._ctx = null; this._source = null; this._stream = null; this._media = null;
-      this._worklet = null; this._mute = null; this._fallbackTimer = null; this._objectUrl = null; this._moduleUrl = null; this._generation = 0;
-      this._analyser = null; this._freq = null; this._lastLevels = new Float32Array(BAND_COUNT);
-      this._detect = createBandDetector(); this._videoTrack = null; this._kind = 'off';
+      this._worklet = null; this._mute = null; this._fallbackTimer = null; this._objectUrl = null; this._generation = 0;
+      this._analyser = null; this._freq = null; this._videoTrack = null; this._kind = 'off';
     }
     _state(value, detail) { this.state = value; if (typeof this.onState === 'function') this.onState({ state: value, detail: detail || null }); }
     async _context() {
       const Ctx = root.AudioContext || root.webkitAudioContext;
       if (!Ctx) throw new Error('Web Audio is unavailable in this browser.');
-      if (!this._ctx || this._ctx.state === 'closed') this._ctx = new Ctx();
+      if (!this._ctx || this._ctx.state === 'closed') this._ctx = new Ctx({ latencyHint: 'interactive' });
       try { await this._ctx.resume(); } catch (_) { /* caller can retry from a user gesture */ }
       return this._ctx;
     }
     async select(kind, options) {
       options = options || {};
-      if (!['off','mic','desktop','file','stream'].includes(kind)) throw new TypeError('Unknown audio source: ' + kind);
+      if (!KINDS.includes(kind)) throw new TypeError('Unknown audio source: ' + kind);
       await this.stop();
       if (kind === 'off') { this._state('off'); return; }
-      const generation=++this._generation;
+      const generation = ++this._generation;
       this._kind = kind;
+      const raw = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
       try {
+        // The context is created (and resumed) inside the click, before any permission prompt, so it never starts suspended.
         const ctx = await this._context();
-        if(generation!==this._generation)return;
+        if (generation !== this._generation) return;
         if (kind === 'mic') {
-          if (!root.navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('Microphone capture is unavailable.');
-          const stream = await navigator.mediaDevices.getUserMedia({audio:{deviceId:options.deviceId?{exact:options.deviceId}:undefined,echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
-          if(generation!==this._generation){for(const t of stream.getTracks())t.stop();return;}this._stream=stream;
-          this._source = ctx.createMediaStreamSource(this._stream);
-          const status=await this._connectAnalysis(this._source,generation);if(generation===this._generation)this._state('mic',status);return;
+          if (!root.navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('Microphone needs a secure page (https) and a browser that allows it.');
+          let stream;
+          try { stream = await navigator.mediaDevices.getUserMedia({ audio: options.deviceId ? { ...raw, deviceId: { exact: options.deviceId } } : raw, video: false }); }
+          catch (e) {
+            if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw new Error('Microphone blocked. Allow it in the address bar (lock icon → Microphone), then try again.');
+            if (e && (e.name === 'NotFoundError' || e.name === 'OverconstrainedError')) throw new Error('No microphone found.');
+            if (e && e.name === 'NotReadableError') throw new Error('The microphone is busy in another app.');
+            throw e;
+          }
+          if (generation !== this._generation) { for (const t of stream.getTracks()) t.stop(); return; }
+          this._stream = stream;
+          if (ctx.state !== 'running') try { await ctx.resume(); } catch (_) { }
+          this._source = ctx.createMediaStreamSource(stream);
+          const status = await this._connectAnalysis(this._source, generation);
+          if (generation === this._generation) this._state('mic', status);
+          return;
         }
         if (kind === 'desktop') {
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) throw new Error('Desktop audio capture is unavailable.');
-          const stream = await navigator.mediaDevices.getDisplayMedia({audio:true,video:true});
-          if(generation!==this._generation){for(const t of stream.getTracks())t.stop();return;}this._stream=stream;
-          const audioTracks = this._stream.getAudioTracks();
-          if (!audioTracks.length) { this._releaseStream(); throw new Error('The selected screen or tab did not share audio.'); }
-          this._videoTrack = this._stream.getVideoTracks()[0] || null; // Keep display capture alive until stop().
-          this._source = ctx.createMediaStreamSource(this._stream);const status=await this._connectAnalysis(this._source,generation);if(generation===this._generation)this._state('desktop',status);return;
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) throw new Error('Tab and system audio capture needs Chrome or Edge on a computer.');
+          // Video is required by the API; ask for the smallest, slowest stream so capture costs almost nothing.
+          const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { frameRate: 1, width: { ideal: 320 }, height: { ideal: 180 } },
+            audio: { ...raw, suppressLocalAudioPlayback: false },
+            systemAudio: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'include', preferCurrentTab: false
+          });
+          if (generation !== this._generation) { for (const t of stream.getTracks()) t.stop(); return; }
+          this._stream = stream;
+          const audioTracks = stream.getAudioTracks();
+          if (!audioTracks.length) { this._releaseStream(); throw new Error('No audio was shared. Pick the tab (or Entire screen) and switch on “Share audio”.'); }
+          this._videoTrack = stream.getVideoTracks()[0] || null;
+          if (this._videoTrack) { try { await this._videoTrack.applyConstraints({ frameRate: 1 }); } catch (_) { } }
+          audioTracks[0].addEventListener('ended', () => { if (generation === this._generation) this.stop(); });
+          this._source = ctx.createMediaStreamSource(stream);
+          const status = await this._connectAnalysis(this._source, generation);
+          if (generation === this._generation) this._state('desktop', status);
+          return;
         }
         if (!root.document) throw new Error('HTML media playback is unavailable.');
-        const media = this._media = document.createElement('audio'); media.preload='auto'; media.crossOrigin='anonymous'; media.controls=false;
+        const media = this._media = document.createElement('audio'); media.preload = 'auto'; media.crossOrigin = 'anonymous'; media.controls = false;
         const url = options.url || (options.file && URL.createObjectURL(options.file));
         if (!url) throw new Error('Provide a file or URL for this source.');
         if (options.file) this._objectUrl = url;
-        media.src = url; this.file = options.file || url; media.onended=()=>this._state('ended');
-        media.onerror=()=>{if(generation===this._generation)this._state('error','Media failed to load; check the URL, format, and CORS policy.');};
-        media.ontimeupdate=()=>{this.position=media.currentTime||0;this.duration=Number.isFinite(media.duration)?media.duration:0;};
-        this._source = ctx.createMediaElementSource(media); this._source.connect(ctx.destination); // Only files/streams are monitored; live capture is never played back.
-        const status=await this._connectAnalysis(this._source,generation);if(generation!==this._generation)return;
-        try { await media.play(); } catch (e) { this._releaseAll(); this._state('error',e.message); throw new Error('Media playback needs a user gesture or failed to start: '+e.message); }
-        this._state(kind,status);
-      } catch (e) { if(generation!==this._generation)return;this._releaseAll();this._state('error', e && e.message || String(e)); throw e; }
+        media.src = url; this.file = options.file || url; media.onended = () => this._state('ended');
+        media.onerror = () => { if (generation === this._generation) this._state('error', 'Media failed to load; check the URL, format, and CORS policy.'); };
+        media.ontimeupdate = () => { this.position = media.currentTime || 0; this.duration = Number.isFinite(media.duration) ? media.duration : 0; };
+        media.onseeked = () => { if (typeof this.onSeek === 'function') this.onSeek(); };
+        this._source = ctx.createMediaElementSource(media); this._source.connect(ctx.destination); // files/streams are heard; live capture is never played back
+        const status = await this._connectAnalysis(this._source, generation); if (generation !== this._generation) return;
+        try { await media.play(); } catch (e) { this._releaseAll(); this._state('error', e.message); throw new Error('Media playback needs a tap to start: ' + e.message); }
+        this._state(kind, status);
+      } catch (e) { if (generation !== this._generation) return; this._releaseAll(); this._state('error', e && e.message || String(e)); throw e; }
     }
-    async _connectAnalysis(source,generation) {
-      const ctx=this._ctx; this._analyser=ctx.createAnalyser(); this._analyser.fftSize=1024; this._analyser.smoothingTimeConstant=0;
-      source.connect(this._analyser); this._freq=new Float32Array(this._analyser.frequencyBinCount);
-      let usedWorklet=false;
+    async _connectAnalysis(source, generation) {
+      const ctx = this._ctx;
+      let usedWorklet = false;
       if (ctx.audioWorklet && root.Blob && root.URL && URL.createObjectURL) {
         try {
-          let load=moduleLoads.get(ctx);
-          if(!load){const url=URL.createObjectURL(new Blob([workletSource()],{type:'application/javascript'}));load=ctx.audioWorklet.addModule(url).finally(()=>URL.revokeObjectURL(url));moduleLoads.set(ctx,load);load.catch(()=>moduleLoads.delete(ctx));}
-          await load;if(generation!==this._generation)return null;
-          const node=new AudioWorkletNode(ctx,'dynamics-bands',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]});
-          source.connect(node);this._worklet=node;
-          this._mute=ctx.createGain();this._mute.gain.value=0;node.connect(this._mute);this._mute.connect(ctx.destination);
-          node.port.onmessage=e=>{const d=e.data;if(d&&d.ready)return;if(!d||!d.levels||!d.onsets)return;this._emit(d.levels,d.onsets,d.time);node.port.postMessage(d,[d.levels.buffer,d.onsets.buffer]);};
-          usedWorklet=true;
+          let load = moduleLoads.get(ctx);
+          if (!load) { const url = URL.createObjectURL(new Blob([workletSource()], { type: 'application/javascript' })); load = ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url)); moduleLoads.set(ctx, load); load.catch(() => moduleLoads.delete(ctx)); }
+          await load; if (generation !== this._generation) return null;
+          const node = new AudioWorkletNode(ctx, 'dynamic-analysis', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers' });
+          source.connect(node); this._worklet = node;
+          this._mute = ctx.createGain(); this._mute.gain.value = 0; node.connect(this._mute); this._mute.connect(ctx.destination); // keeps the graph pulling
+          node.port.onmessage = e => { const d = e.data; if (!(d instanceof Float32Array)) return; this._emit(d.subarray(0, 24), d[28], d.subarray(24, 28)); node.port.postMessage(d, [d.buffer]); };
+          usedWorklet = true;
         } catch (_) { }
       }
-      if(generation!==this._generation)return null;
+      if (generation !== this._generation) return null;
       if (!usedWorklet) {
-        this._fallbackTimer=root.setInterval(()=>this._fallback(),8);
-        return {degraded:true,reason:'AudioWorklet unavailable; using analyser fallback with higher latency.'};
+        this._analyser = ctx.createAnalyser(); this._analyser.fftSize = 1024; this._analyser.smoothingTimeConstant = 0;
+        source.connect(this._analyser); this._freq = new Float32Array(this._analyser.frequencyBinCount);
+        this._fallbackTimer = root.setInterval(() => this._fallback(), 8);
+        return { degraded: true, reason: 'AudioWorklet unavailable; using analyser fallback with higher latency.' };
       }
       return null;
     }
     _fallback() {
-      if(!this._analyser||!this._ctx)return;
+      if (!this._analyser || !this._ctx) return;
       this._analyser.getFloatFrequencyData(this._freq);
-      const edges=makeBandEdges(this._ctx.sampleRate,this._analyser.fftSize), levels=new Float32Array(BAND_COUNT);
-      for(let b=0;b<BAND_COUNT;b++){let sum=0,n=0;for(let k=edges[b];k<edges[b+1]&&k<this._freq.length;k++){sum+=Math.pow(10,this._freq[k]/20);n++;}levels[b]=Math.min(1,(sum/Math.max(1,n))*5);}
-      this._emit(levels,this._detect(levels,this._ctx.currentTime),this._ctx.currentTime);
+      const sr = this._ctx.sampleRate, n = this._freq.length, levels = new Float32Array(BAND_COUNT), top = Math.min(16000, sr * .475);
+      for (let b = 0; b < BAND_COUNT; b++) {
+        const a = Math.max(1, Math.round(35 * Math.pow(top / 35, b / BAND_COUNT) * 1024 / sr)), e = Math.max(a + 1, Math.round(35 * Math.pow(top / 35, (b + 1) / BAND_COUNT) * 1024 / sr));
+        let s = 0; for (let k = a; k < e && k < n; k++) { const m = Math.pow(10, this._freq[k] / 20) * 512; s += m * m; }
+        levels[b] = Math.sqrt(s) / 1024 * 4;
+      }
+      this._emit(levels, this._ctx.currentTime, null);
     }
-    _emit(levels,onsets,time) { const now=root.performance?.now()||Date.now();if(!this._reportStart)this._reportStart=now;this._reportCount++;if(now-this._reportStart>=500){this.analysisHz=this._reportCount*1000/(now-this._reportStart);this._reportCount=0;this._reportStart=now}this._lastLevels.set(levels); if(typeof this.onBands==='function')this.onBands({time:Number(time)||0,levels,onsets}); }
+    _emit(raw, time, odf) {
+      const now = root.performance ? performance.now() : Date.now();
+      if (!this._reportStart) this._reportStart = now; this._reportCount++;
+      if (now - this._reportStart >= 500) { this.analysisHz = this._reportCount * 1000 / (now - this._reportStart); this._reportCount = 0; this._reportStart = now; }
+      const s = this.signal.push(raw, Number(time) || 0, odf);
+      if (typeof this.onBands === 'function') this.onBands({ time: Number(time) || 0, levels: s.levels, onsets: s.onsets, odf: s.odf, raw, gain: s.gain, loud: s.loud });
+    }
     async inputDevices() {
-      if(!root.navigator||!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices)return [];
-      const devices=await navigator.mediaDevices.enumerateDevices();return devices.filter(d=>d.kind==='audioinput').map(d=>({deviceId:d.deviceId,label:d.label||'Microphone'}));
+      if (!root.navigator || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
+      const devices = await navigator.mediaDevices.enumerateDevices(); return devices.filter(d => d.kind === 'audioinput').map(d => ({ deviceId: d.deviceId, label: d.label || 'Microphone' }));
     }
-    async playPause() { if(!this._media)return false;const ctx=await this._context();if(ctx.state!=='running')await ctx.resume();if(this._media.paused){await this._media.play();return true;}this._media.pause();return false; }
-    async stop() { this._generation++;this._releaseAll();this._kind='off';this.analysisHz=0;this._reportCount=0;this._reportStart=0;this.position=0;this.duration=0;this.file=null;this._state('off'); }
-    _releaseStream() { if(this._stream){for(const t of this._stream.getTracks())try{t.stop();}catch(_){}this._stream=null;}this._videoTrack=null; }
+    async playPause() { if (!this._media) return false; const ctx = await this._context(); if (ctx.state !== 'running') await ctx.resume(); if (this._media.paused) { await this._media.play(); return true; } this._media.pause(); return false; }
+    async stop() { this._generation++; this._releaseAll(); this._kind = 'off'; this.analysisHz = 0; this._reportCount = 0; this._reportStart = 0; this.position = 0; this.duration = 0; this.file = null; this._state('off'); }
+    _releaseStream() { if (this._stream) { for (const t of this._stream.getTracks()) try { t.stop(); } catch (_) { } this._stream = null; } this._videoTrack = null; }
     _releaseAll() {
-      if(this._fallbackTimer!==null){root.clearInterval(this._fallbackTimer);this._fallbackTimer=null;}
-      if(this._worklet){this._worklet.port.onmessage=null;try{this._worklet.disconnect();}catch(_){}this._worklet=null;}
-      if(this._mute){try{this._mute.disconnect();}catch(_){}this._mute=null;}
-      if(this._source){try{this._source.disconnect();}catch(_){}this._source=null;}
-      if(this._analyser){try{this._analyser.disconnect();}catch(_){}this._analyser=null;}
+      if (this._fallbackTimer !== null) { root.clearInterval(this._fallbackTimer); this._fallbackTimer = null; }
+      if (this._worklet) { this._worklet.port.onmessage = null; try { this._worklet.disconnect(); } catch (_) { } this._worklet = null; }
+      if (this._mute) { try { this._mute.disconnect(); } catch (_) { } this._mute = null; }
+      if (this._source) { try { this._source.disconnect(); } catch (_) { } this._source = null; }
+      if (this._analyser) { try { this._analyser.disconnect(); } catch (_) { } this._analyser = null; }
       this._releaseStream();
-      if(this._media){this._media.pause();this._media.removeAttribute('src');try{this._media.load();}catch(_){}this._media=null;}
-      if(this._objectUrl){URL.revokeObjectURL(this._objectUrl);this._objectUrl=null;}
+      if (this._media) { this._media.pause(); this._media.removeAttribute('src'); try { this._media.load(); } catch (_) { } this._media = null; }
+      if (this._objectUrl) { URL.revokeObjectURL(this._objectUrl); this._objectUrl = null; }
     }
-    async dispose() { await this.stop();if(this._ctx&&this._ctx.state!=='closed')await this._ctx.close();this._ctx=null; }
+    async dispose() { await this.stop(); if (this._ctx && this._ctx.state !== 'closed') await this._ctx.close(); this._ctx = null; }
   }
 
-  DynamicsAudio.BAND_COUNT=BAND_COUNT;
-  DynamicsAudio.createBandDetector=createBandDetector;
-  DynamicsAudio.workletSource=workletSource;
-  if(typeof module!=='undefined'&&module.exports)module.exports=DynamicsAudio;
-  root.DynamicsAudio=DynamicsAudio;
-})(typeof window!=='undefined'?window:globalThis);
+  DynamicsAudio.BAND_COUNT = BAND_COUNT;
+  DynamicsAudio.analysisCore = analysisCore;
+  DynamicsAudio.createSignal = createSignal;
+  DynamicsAudio.workletSource = workletSource;
+  if (typeof module !== 'undefined' && module.exports) module.exports = DynamicsAudio;
+  root.DynamicsAudio = DynamicsAudio;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* Beat tracker. Works on the onset signal from 40_audio.js (any rate, any source) and keeps a beat clock that
+   predicts beats ahead of time, so visuals can land on the beat instead of trailing it.
+
+   1. Onset strength: the four flux ranges are each divided by their own running mean (loudness-free), the bass range
+      counts double (kicks carry the pulse), resampled to 100 frames/s, minus a 0.3 s moving average.
+   2. Tempo (4×/s): autocorrelation of the last 10 s, scored as a comb (lags L, 2L, 3L, 4L) and weighted by a
+      log-normal prior around 120 BPM. A different tempo must win for 0.75 s in a row before it replaces the
+      current one; double/half switches need a clear margin, so the pulse does not flip octaves.
+   3. Phase (4×/s): the pulse train of that period that best matches the last 4 s of onsets (recent beats weigh more).
+   4. Clock: a phase-locked loop pulls the predicted beat towards each measurement; three large misses in a row
+      re-seat it at once (new song, break, tempo jump).
+   5. Bar: the beat that keeps carrying the most bass becomes beat 1 of 4.
+   Confidence falls to 0 in silence or when nothing repeats, and the app then follows raw onsets instead. */
+(function (root) {
+  'use strict';
+  const FR = 100, N = 1000, EST = 25;
+  const DETECT_DELAY = .022; // onset signal peaks ~22 ms after the true attack (measured by tools/beat_test.mjs)
+
+  class BeatTracker {
+    constructor() { this.reset(); }
+    reset() {
+      this.buf = new Float32Array(N); this.lowBuf = new Float32Array(N); this.n = 0;
+      this.cur = -1; this.f0 = 0; this.acc = 0; this.accLow = 0; this.accN = 0;
+      this.mean = new Float32Array([1, 1, 1, 1]).fill(1e-3); this.ma = 0; this.hopT = 0;
+      this.period = 0; this.tb = 0; this.conf = 0; this.strength = 0; this.locked = false;
+      this.cand = 0; this.candN = 0; this.miss = 0; this.fired = -1e9; this.count = 0;
+      this.bar = new Float32Array(4); this.pending = []; this.activity = 0; this.since = 0;
+      this.hint = 0;
+    }
+    /* New section (a drop): forget the onset history so the build's rolls do not hold the old tempo; the clock keeps
+       running and the first estimate (2 s later) is adopted outright. */
+    refresh() { this.buf.fill(0); this.lowBuf.fill(0); this.f0 += this.n; this.n = 0; this.since = 0; this.fresh = true; this.candN = 0; this.conf *= .6; }
+    get bpm() { return this.period ? 60 * FR / this.period : 0; }
+    /* Optional tempo hint (e.g. from track metadata): biases the prior towards it. */
+    setHint(bpm) { this.hint = bpm > 0 ? bpm : 0; }
+
+    push(time, odf) {
+      const dt = this.hopT ? Math.min(.1, Math.max(.0005, time - this.hopT)) : .0027; this.hopT = time;
+      const a = 1 - Math.exp(-dt / 2.5);
+      let o = 0, low = 0;
+      for (let i = 0; i < 4; i++) {
+        const v = odf[i] || 0; this.mean[i] += (v - this.mean[i]) * a; this.mean[i] = Math.max(this.mean[i], 1e-4);
+      }
+      o = (odf[0] || 0) / this.mean[0] + 2 * (odf[1] || 0) / this.mean[1] + .5 * (odf[2] || 0) / this.mean[2];
+      low = (odf[1] || 0) / this.mean[1];
+      this.activity += ((odf[0] || 0) - this.activity) * a;
+      const f = Math.floor(time * FR);
+      if (this.cur < 0) { this.cur = f; this.f0 = f; }
+      if (f > this.cur) {
+        if (f - this.cur > 50 || f < this.cur - 50) { this.reset(); this.cur = f; this.f0 = f; }
+        else {
+          this._frame(this.accN ? this.acc / this.accN : 0, this.accN ? this.accLow / this.accN : 0);
+          for (let k = this.cur + 1; k < f; k++) this._frame(0, 0);
+          this.cur = f;
+        }
+        this.acc = 0; this.accLow = 0; this.accN = 0;
+      }
+      this.acc += o; this.accLow += low; this.accN++;
+    }
+    _frame(o, low) {
+      this.ma += (o - this.ma) * (1 / 30);
+      const i = this.n % N;
+      this.buf[i] = Math.max(0, o - this.ma); this.lowBuf[i] = low; this.n++;
+      this._settleBar();
+      if (++this.since >= EST) { this.since = 0; this._estimate(); }
+    }
+    /* Linear copy of the last `len` frames, oldest first. */
+    _last(src, len) {
+      const out = new Float32Array(len), start = this.n - len;
+      for (let j = 0; j < len; j++) out[j] = src[(start + j) % N];
+      return out;
+    }
+    _estimate() {
+      const len = Math.min(this.n, N);
+      if (len < 200) return;
+      const x = this._last(this.buf, len);
+      let m = 0; for (let j = 0; j < len; j++) m += x[j]; m /= len;
+      const y = new Float32Array(len); for (let j = 0; j < len; j++) y[j] = x[j] - m;
+      const Lmax = Math.min(480, len - 90), r = new Float32Array(Lmax + 2);
+      for (let L = 0; L <= Lmax + 1 && L < len; L++) { let s = 0; for (let j = L; j < len; j++) s += y[j] * y[j - L]; r[L] = s / (len - L); }
+      const r0 = r[0] || 1e-9; for (let L = 0; L < r.length; L++) r[L] /= r0;
+      const at = L => { if (L >= Lmax) return 0; const i = Math.floor(L), f = L - i; return r[i] * (1 - f) + r[i + 1] * f; };
+      const center = this.hint || 120;
+      const comb = L => { let s = 0, w = 0; for (let k = 1; k <= 4; k++) { if (k * L > Lmax) break; const wk = 1 / k; s += Math.max(-.2, at(k * L)) * wk; w += wk; } return w ? s / w : 0; };
+      const score = L => { const bpm = 60 * FR / L, z = Math.log2(bpm / center) / (this.hint ? .35 : .9); return Math.max(0, comb(L)) * Math.exp(-.5 * z * z); };
+      let best = 0, bestS = -1, sum = 0, cnt = 0;
+      for (let L = 60 * FR / 210; L <= 60 * FR / 52; L += .25) { const s = score(L); sum += s; cnt++; if (s > bestS) { bestS = s; best = L; } }
+      const mean = sum / cnt;
+      // Refine: parabola through neighbours.
+      const s1 = score(best - .25), s3 = score(best + .25), den = s1 - 2 * bestS + s3;
+      if (den < 0) best += .25 * .5 * (s1 - s3) / den;
+
+      // Metrical level: when every other pulse of the doubled period is much weaker (a ballad's off-beat chords),
+      // the slower pulse is the beat. Otherwise the comb and prior decide (half/double stays on the beat grid).
+      const win = this._last(this.buf, Math.min(len, 600));
+      let want = best;
+      if (60 * FR / (best * 2) >= 50) { const a = this._train(win, best * 2), m = this._train(win, best * 2, a.ph + best); if (m / Math.max(a.A, 1e-9) < .32) want = best * 2; }
+
+      if (!this.period || this.fresh) { this.period = want; this.fresh = false; }
+      else {
+        const ratio = want / this.period;
+        if (Math.abs(ratio - 1) < .045) { this.period += (want - this.period) * .3; this.candN = 0; }
+        else {
+          const octave = [.5, 2, 1.5, 2 / 3, 3, 1 / 3].some(k => Math.abs(ratio - k) < .05);
+          if (octave || score(want) > score(this.period) * 1.12) {
+            if (this.cand && Math.abs(want / this.cand - 1) < .04) this.candN++; else { this.cand = want; this.candN = 1; }
+            if (this.candN >= (octave ? 4 : 3)) { this.period = want; this.candN = 0; this.miss = 3; }
+          } else this.candN = Math.max(0, this.candN - 1);
+        }
+      }
+      const peak = comb(this.period);
+      this.strength = peak;
+
+      // Phase: best pulse train over the last 4 s.
+      const T = this.period, W = Math.min(len, 400), tr = this._train(this._last(this.buf, W), T);
+      const bp = tr.ph, bA = tr.A, aSum = tr.sum, aN = tr.n;
+      const contrast = aN ? bA / Math.max(1e-6, aSum / aN) : 0;
+      const endIndex = this.n - 1;              // absolute frame index of z[W-1]
+      const tMeas = (this.f0 + endIndex - bp + .5) / FR - DETECT_DELAY;
+      const P = T / FR;
+
+      const live = this.activity > 1e-4;
+      const c = live ? Math.min(1, Math.max(0, (peak - .05) / .2)) * Math.min(1, Math.max(0, (contrast - 1.15) / 1.2)) * Math.min(1, Math.max(0, (bestS / Math.max(mean, 1e-6) - 1.2) / 1.5) + .4) : 0;
+      this.conf += (c - this.conf) * (c < this.conf ? .5 : .35);
+
+      if (!this.locked) { this.tb = tMeas; this.locked = true; this.miss = 0; }
+      else {
+        let e = (tMeas - this.tb) / P; e -= Math.round(e);
+        if (Math.abs(e) > .2) this.miss++; else this.miss = 0;
+        if (this.miss >= 3) { this.tb = tMeas; this.miss = 0; }
+        else this.tb += e * P * .35;
+      }
+      // Keep tb close to now so rounding stays exact.
+      const k = Math.floor((tMeas - this.tb) / P); this.tb += k * P;
+    }
+    /* Pulse train of period T over z (oldest first). With ph given, the strength at that phase; else the best phase. */
+    _train(z, T, ph) {
+      const W = z.length, sm = new Float32Array(W);
+      for (let j = 0; j < W; j++) sm[j] = z[j] + .5 * ((z[j - 1] || 0) + (z[j + 1] || 0));
+      const v = p => { const i = Math.floor(p), f = p - i; return i < 0 || i >= W - 1 ? 0 : sm[i] * (1 - f) + sm[i + 1] * f; };
+      const at = q => { let A = 0, w = 1; for (let p = W - 1 - q; p >= 0; p -= T) { A += v(p) * w; w *= .88; } return A; };
+      if (ph !== undefined) return at(((ph % T) + T) % T);
+      let bp = 0, bA = -1, sum = 0, n = 0;
+      for (let q = 0; q < T; q += .5) { const A = at(q); sum += A; n++; if (A > bA) { bA = A; bp = q; } }
+      return { ph: bp, A: bA, sum, n };
+    }
+    /* Beat clock at audio time t (seconds, same clock as push()). */
+    phase(t) { if (!this.period) return 0; const P = this.period / FR, q = (t - this.tb) / P; return q - Math.floor(q); }
+    /* Call every frame with the audio time to show. Returns 0, or 1 (beat), or 2 (downbeat) once per predicted beat. */
+    poll(t) {
+      if (!this.period || !this.locked) return 0;
+      const P = this.period / FR, k = Math.floor((t - this.tb) / P), bt = this.tb + k * P;
+      if (bt <= this.fired + P * .55) return 0;
+      this.fired = bt; this.count++;
+      this.pending.push([bt, this.count & 3]);
+      return ((this.count - this.barOffset()) & 3) === 0 ? 2 : 1;
+    }
+    barOffset() { let b = 0; for (let i = 1; i < 4; i++) if (this.bar[i] > this.bar[b]) b = i; return b; }
+    /* Once a fired beat is 60 ms in the past, credit its bass onset to its slot in the bar. */
+    _settleBar() {
+      const now = (this.f0 + this.n - 1) / FR;
+      while (this.pending.length && this.pending[0][0] + .06 < now) {
+        const [bt, slot] = this.pending.shift(), c = Math.round((bt + DETECT_DELAY) * FR) - this.f0;
+        let e = 0; for (let j = c - 3; j <= c + 3; j++) if (j >= this.n - N && j < this.n && j >= 0) e = Math.max(e, this.lowBuf[j % N]);
+        for (let i = 0; i < 4; i++) this.bar[i] *= .97;
+        this.bar[slot] += e;
+      }
+    }
+  }
+  /* Song sections from loudness and bass relative to the song's own recent history (raw levels, before automatic
+     gain, so a drop stays a jump). States: calm, build, full. A drop is bass and loudness leaping back after a stretch
+     without bass: the moment the whole picture should explode. Also reports intensity (0..1) and build tension (0..1). */
+  class SectionTracker {
+    constructor() { this.reset(); }
+    reset() {
+      this.t = 0; this.lf = -90; this.ls = -90; this.ll = -90; this.ff = -90; this.fs = -90; this.fl = -90; this.hf = -90; this.hs = -90;
+      this.state = 'calm'; this.since = 0; this.lastDrop = -1e9; this.noBass = 0; this.intensity = 0; this.tension = 0; this.drop = 0; this.events = [];
+      this.bassHist = []; this.histT = 0;
+    }
+    push(time, raw) {
+      const dt = this.t ? Math.min(.1, Math.max(.0005, time - this.t)) : .0027; this.t = time;
+      let lo = 0, all = 0, hi = 0;
+      for (let b = 0; b < 24; b++) { const e = (raw[b] || 0) * (raw[b] || 0); all += e; if (b < 5) lo += e; else if (b >= 14) hi += e; }
+      const db = x => 10 * Math.log10(x + 1e-9), L = db(lo / 5), F = db(all / 24), H = db(hi / 10), k = tau => 1 - Math.exp(-dt / tau);
+      if (this.lf < -89) { this.lf = this.ls = this.ll = L; this.ff = this.fs = this.fl = F; this.hf = this.hs = H; }
+      this.lf += (L - this.lf) * k(.07); this.ls += (L - this.ls) * k(3); this.ll += (L - this.ll) * k(25);
+      this.ff += (F - this.ff) * k(.12); this.fs += (F - this.fs) * k(3); this.fl += (F - this.fl) * k(25);
+      this.hf += (H - this.hf) * k(.3); this.hs += (H - this.hs) * k(6);
+      // Bass level history (one sample per 50 ms, 6 s): a drop is bass returning after it was gone.
+      if ((this.histT += dt) >= .05) { this.histT = 0; this.bassHist.push(this.lf); if (this.bassHist.length > 120) this.bassHist.shift(); }
+      const silent = F < -75, loud = this.ff - this.fl, prom = this.lf - this.ff;   // prom: bass vs whole mix, dB
+      const bassless = prom < -14 || silent;
+      this.noBass = bassless ? Math.min(3, this.noBass + dt) : Math.max(0, this.noBass - dt * 3);
+      if (silent) this.heard = 0; else this.heard = (this.heard || 0) + dt;
+      this.intensity += (Math.min(1, Math.max(0, (loud + 12) / 15)) * (silent ? 0 : 1) - this.intensity) * k(.25);
+      this.drop *= Math.exp(-dt / .6);
+      const h = this.bassHist, before = h.length > 40 ? Math.max(...h.slice(-80, -10)) : 99;
+      if (!silent && this.lf - before > 12 && prom > -9 && loud > -4 && time - this.lastDrop > 8) {
+        this.lastDrop = time; this.drop = 1; this.noBass = 0; this.events.push(time); this.go('full', time);
+      }
+      // Build: no bass while the top end rises (rolls, risers, noise sweeps). Calm: quiet or bassless and flat.
+      const rising = this.hf - this.hs;
+      if (this.state === 'build') { if (!bassless && this.noBass < .2) this.go('full', time); }
+      else if (this.noBass > 1 && rising > 1.2 && this.heard > 6) this.go('build', time);
+      else if (this.state === 'full' && (loud < -8 || this.noBass > 2)) this.go('calm', time);
+      else if (this.state === 'calm' && loud > -5 && !bassless) this.go('full', time);
+      this.tension = this.state === 'build' ? Math.min(1, (time - this.since) / 12) : Math.max(0, this.tension - dt);
+    }
+    go(s, t) { if (this.state !== s) { this.state = s; this.since = t; } }
+  }
+  BeatTracker.SectionTracker = SectionTracker;
+  BeatTracker.FR = FR;
+  if (typeof module !== 'undefined' && module.exports) module.exports = BeatTracker;
+  root.BeatTracker = BeatTracker; root.SectionTracker = SectionTracker;
+})(typeof window !== 'undefined' ? window : globalThis);
 
 /* Controller core, shared by Dynamic and Dynamic Pad. The Gamepad API covers Xbox, PlayStation, Switch Pro and most
    generic pads on PC and Android; the Android shell adds native rumble and lights (DynamicNative.padRumble/padLight).
@@ -289,6 +570,7 @@ const Feel={
   peak:new Float32Array(24).fill(.02),lo:0,hi:0,punchL:0,punchH:0,strong:0,weak:0,t:0,beat:0,
   /* Called at the analysis rate: ~375/s on the web worklet, ~125/s from the Android capture. */
   /* hiMode: what the light motor plays. 0 treble, 1 bass (doubles the heavy motor), 2 nothing. */
+  /* mode: 1 Music, 2 Beats, 4 Stream (the music's own bass and treble envelopes, straight to the motors). */
   bands(levels,onsets,mode,hiMode=0){
     const now=performance.now(),dt=clamp((now-(this.t||now))/1000,.001,.1);this.t=now;
     let lo=0,hi=0,kl=0,kh=0;const fall=Math.exp(-dt/8);
@@ -302,6 +584,12 @@ const Feel={
     this.punchL=Math.max(this.punchL*Math.exp(-dt/.04),kl>.15?Math.min(1,.5+kl):0);
     this.punchH=Math.max(this.punchH*Math.exp(-dt/.025),kh>.2?Math.min(1,.3+kh*.8):0);
     this.beat=Math.max(this.punchL,this.beat*Math.exp(-dt/.15));
+    if(mode===4){   // Stream: raw envelopes (levels are already auto-gained), fast attack, 25 ms release
+      let a=0,b=0;for(let i=0;i<6;i++)a+=levels[i]/6;for(let i=9;i<24;i++)b+=levels[i]/15;
+      const sa=Math.pow(clamp(a*1.25,0,1),1.2),sb=Math.pow(clamp(b*1.6,0,1),1.2),r=1-Math.exp(-dt/.025);
+      this.sLo=sa>(this.sLo||0)?sa:this.sLo+(sa-this.sLo)*r;this.sHi=sb>(this.sHi||0)?sb:this.sHi+(sb-this.sHi)*r;
+      this.strong=clamp(this.sLo+this.punchL*.25,0,1);this.weak=hiMode===2?0:hiMode===1?this.strong*.7:clamp(this.sHi+this.punchH*.2,0,1);return;
+    }
     this.strong=mode===2?this.punchL:clamp(this.lo*this.lo*.8+this.punchL*.8,0,1);
     this.weak=hiMode===2?0:hiMode===1?this.strong*.7:mode===2?this.punchH*.8:clamp(Math.pow(this.hi,1.6)*.7+this.punchH*.5,0,1);
   },
@@ -350,14 +638,15 @@ const Pad={
 
 /* Dynamic Pad: the controller as a music feeler. Audio analysis (worklet, ~375/s) drives the motors directly from
    its callback, so rumble keeps time even when this page is not drawing. */
-const MODES=[['Music','Heavy motor plays the bass line and kicks, light motor plays mids, snares and hats.'],['Beats','Only the hits: a punch on every kick, a tap on every snare and hat.'],['Off','Motors stay still; meters keep showing what they would do.']];
+const MODES=[['Music','Heavy motor plays the bass line and kicks, light motor plays mids, snares and hats.'],['Beats','Only the hits: a punch on every kick, a tap on every snare and hat.'],['Off','Motors stay still; meters keep showing what they would do.'],['Stream','The song itself, streamed raw: its bass envelope drives the heavy motor and its treble the light one, every moment, no shaping.']];
+const ORDER=[3,0,1,2];   // buttons left to right
 const cfg=Object.assign({mode:0,gain:1,hi:0},store.get('dynamic.pad',{}));
 const audio=new DynamicsAudio();
 let live=0,native=false;
 const save=()=>store.set('dynamic.pad',cfg);
 function bands(levels,onsets){
   live=performance.now();
-  Feel.bands(levels,onsets,cfg.mode===1?2:1,cfg.hi);
+  Feel.bands(levels,onsets,cfg.mode===3?4:cfg.mode===1?2:1,cfg.hi);
   if(cfg.mode!==2&&!native)Pad.rumble(Feel.strong*cfg.gain,Feel.weak*cfg.gain);
   lastLevels=levels;
 }
@@ -379,10 +668,10 @@ $('#file').onchange=e=>{const f=e.target.files[0];if(f){if(NATIVE)NATIVE.stopPla
 mark('off');
 
 const mode=$('#mode');
-MODES.forEach(([n],i)=>{const b=el('button');b.textContent=n;b.onclick=()=>{cfg.mode=i;save();sync();if(i===2)Pad.rumble(0,0)};mode.append(b)});
+ORDER.forEach(i=>{const b=el('button');b.textContent=MODES[i][0];b.dataset.i=i;b.onclick=()=>{cfg.mode=i;save();sync();if(i===2)Pad.rumble(0,0)};mode.append(b)});
 const hiRow=$('#hirow');['Treble','Bass','Off'].forEach((n,i)=>{const b=el('button');b.textContent=n;b.onclick=()=>{cfg.hi=i;save();sync()};hiRow.append(b)});
 const gain=$('#gain');gain.value=cfg.gain;gain.oninput=()=>{cfg.gain=+gain.value;save();sync()};
-function sync(){if(NATIVE&&NATIVE.padConfig)NATIVE.padConfig([1,2,0][cfg.mode],cfg.gain,cfg.hi);[...hiRow.children].forEach((b,i)=>b.classList.toggle('on',i===cfg.hi));[...mode.children].forEach((b,i)=>b.classList.toggle('on',i===cfg.mode));$('#gainv').textContent=Math.round(cfg.gain*100)+'%';$('#modehelp').textContent=MODES[cfg.mode][1]}
+function sync(){if(NATIVE&&NATIVE.padConfig)NATIVE.padConfig([1,2,0,1][cfg.mode],cfg.gain,cfg.hi);[...hiRow.children].forEach((b,i)=>b.classList.toggle('on',i===cfg.hi));[...mode.children].forEach(b=>b.classList.toggle('on',+b.dataset.i===cfg.mode));$('#gainv').textContent=Math.round(cfg.gain*100)+'%';$('#modehelp').textContent=MODES[cfg.mode][1]}
 sync();
 $('#test').onclick=async()=>{const seq=[[1,0,350],[0,1,350],[0,0,150]];for(let k=0;k<6;k++)seq.push([1,.3,70],[0,0,180]);
   for(const[s,w,ms]of seq){Pad.rumble(s,w);Pad.sent=0;await new Promise(r=>setTimeout(r,ms))}Pad.rumble(0,0)};

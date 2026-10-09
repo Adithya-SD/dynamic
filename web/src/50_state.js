@@ -14,6 +14,8 @@ function sanitize(k,v){
   if(d.t==='c')return clamp(Math.round(v),0,d.o.length-1);
   if(d.t==='b')return v?1:0;
   if(d.t==='p')return clamp(Math.round(v),0,SCHEMA.palettes.length-1);
+  if(d.t==='g')return clamp(Math.round(v),0,GEO.length-1);
+  if(d.t==='g')return clamp(Math.round(v),0,GEO.length-1);
   return clamp(v,d.min,d.max);
 }
 /* Full parameter set for a preset: defaults, particle style, classic base, then the preset itself. */
@@ -21,6 +23,7 @@ function presetValues(pr){
   const v={};for(const k of PRESET_KEYS)v[k]=D[k];
   const fx=pr.p.fx|0,style=PRESETS.particleStyles[fx];if(style)Object.assign(v,style);
   if(pr.c==='Classic')for(const k in PRESETS.classicBase)if(k in v)v[k]=PRESETS.classicBase[k];
+  if(typeof pr.p.geo==='string'){const gi=GEO.findIndex(g=>g.n===pr.p.geo);pr={...pr,p:{...pr.p,geo:Math.max(0,gi)}}}
   for(const k in pr.p){const s=sanitize(k,pr.p[k]);if(s!==undefined&&PRESET_KEYS.includes(k))v[k]=s}
   return v;
 }
@@ -29,7 +32,7 @@ function applyPreset(i,{animate=false}={}){
   const list=allPresets();if(!list[i])return;
   current=i;const v=presetValues(list[i]);B={...P,...v};
   if(animate){morph={from:{...P},to:v,t:0}}else{Object.assign(P,v);morph=null}
-  hueBase=v.h;persist();UI&&UI.built&&UI.presetChanged();
+  hueBase=v.h;persist();typeof Director!=='undefined'&&Director.reset();UI&&UI.built&&UI.presetChanged();
 }
 const DISCRETE=new Set(SCHEMA.params.filter(p=>p.t||p.st>=1).map(p=>p.k));
 function stepMorph(dt){
@@ -40,12 +43,15 @@ function stepMorph(dt){
 let persistTimer=0;
 function persist(){clearTimeout(persistTimer);persistTimer=setTimeout(()=>{
   const p={},s={};for(const k of PRESET_KEYS)p[k]=P[k];for(const k of SYSTEM_KEYS)s[k]=P[k];
-  store.set('dynamic.state',{v:1,p,s,cur:allPresets()[current]?.n||'',hue:hueBase});
+  store.set('dynamic.state',{v:2,p,s,cur:allPresets()[current]?.n||'',hue:hueBase});
 },350)}
 function restore(){
   const st=store.get('dynamic.state',null);
   const i=allPresets().findIndex(x=>x.n===st?.cur);applyPreset(i>=0?i:0);
   if(!st)return;
+  if((st.v|0)<2){   // v2 retuned the shared look and moved most settings out of presets: keep only personal choices
+    const keep=['rmode','rhi','rgain','padspd','ref','blr','dsp','bzl','st','uh','ud','cyc','msn'];
+    for(const k of keep){const v=sanitize(k,st.s?.[k]??st.p?.[k]);if(v!==undefined)P[k]=v}return}
   for(const k in st.s){const v=sanitize(k,st.s[k]);if(v!==undefined)P[k]=v}
   for(const k in st.p){const v=sanitize(k,st.p[k]);if(v!==undefined)P[k]=v}
   hueBase=typeof st.hue==='number'?st.hue:P.h;

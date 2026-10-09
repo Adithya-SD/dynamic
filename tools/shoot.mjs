@@ -36,7 +36,7 @@ ws.addEventListener('message', ev => {
 const send = (method, params = {}) => new Promise(r => { const id = ++seq; pending.set(id, r); ws.send(JSON.stringify({id, method, params})); });
 await send('Runtime.enable'); await send('Page.enable');
 const loaded = new Promise(r => waiters.push(m => m.method === 'Page.loadEventFired' && r()));
-await send('Page.navigate', {url: `http://127.0.0.1:8765/${page}?dev&t=${Date.now()}`});
+await send('Page.navigate', {url: `http://127.0.0.1:${process.env.DEVPORT||8765}/${page}?dev&t=${Date.now()}`});
 if (process.env.MOBILE) await send('Emulation.setDeviceMetricsOverride', {width: +w, height: +h, deviceScaleFactor: 2, mobile: true});
 if (process.env.MOBILE) await send('Emulation.setTouchEmulationEnabled', {enabled: true, maxTouchPoints: 5});
 await loaded; await sleep(600);

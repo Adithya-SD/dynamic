@@ -5,7 +5,7 @@ const App={
   ready:null,
   async start(){
     let done;this.ready=new Promise(r=>done=r);
-    Engine.init();restore();Engine.wrap=!!P.edges;
+    Engine.init();Geo.init();restore();Engine.wrap=!!P.edges;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
     UI.build();Input.init();Music.init();PadPlay.init();
@@ -26,19 +26,20 @@ const App={
     requestAnimationFrame(t=>this.frame(t));done();
     Engine.warmRest();
   },
-  frame(now){requestAnimationFrame(t=>this.frame(t));if(!this.lost&&!document.hidden)this.tick(now)},
+  frame(now){requestAnimationFrame(t=>this.frame(t));Gov.raf(now);if(!this.lost&&!document.hidden)this.tick(now)},
   tick(now){
-    const cap=[30,60,90,120,144,0][P.hz],el=(now-this.last)/1000;
-    if(cap&&el<1/cap-.002)return;
+    const cap=Gov.targetHz(),el=(now-this.last)/1000;
+    if(cap&&cap<Gov.refresh-2&&el<1/cap-.002)return;
     if(!this.firstFrame){this.firstFrame=performance.now()}
     this.last=now;const dt=Math.min(Math.max(el,1/500),.05),t0=performance.now();
-    this.frames++;this.fpsT+=el;if(this.fpsT>=.5){this.fps=this.frames/this.fpsT;this.frames=0;this.fpsT=0;this.adapt();$('#fps').textContent=P.st?Math.round(this.fps)+' fps':''}
+    this.frames++;this.fpsT+=el;if(this.fpsT>=.5){this.fps=this.frames/this.fpsT;this.frames=0;this.fpsT=0;this.adapt();Gov.review(this.fps);UI.hud&&UI.hud()}
     clock+=dt;stepMorph(dt);
     if(P.cyc&&!this.paused&&(this.cycT=(this.cycT||0)+dt)>20){this.cycT=0;UI.cycle()}
 
+    const gq=Gov.begin();
     Music.frame(dt);
-    const beat=Music.beat,energy=Music.energy;
-    Space.update(P,this.paused?0:dt,Engine.res,Engine.world,P.aspace*(energy*1.5+beat*2));
+    const E=Director.apply(P,dt),beat=Music.beat,energy=Music.energy;
+    Space.update(E,this.paused?0:dt,Engine.res,Engine.world,P.aspace*(energy*1.5+beat*2));
     PadPlay.frame(dt);
     Input.frame(dt);
     UI.depositStep();
@@ -46,27 +47,29 @@ const App={
 
     const L=this.look;
     this.displayHue+=P.hdrift*dt*.6;
-    L.exposure=P.glw*(1+P.aglow*beat*.35);L.hue=this.displayHue+(P.h-hueBase)*TAU;L.bloom=P.bloom*(1+P.aglow*(beat*1.5+energy));
-    L.echoZoom=P.ezoom*.012*dt*60*(1+P.aspace*beat);L.echoTwist=P.etwist*.02*dt*60;L.time=clock;
+    this.displayHue+=(E.hdrift-P.hdrift)*dt*.6;
+    L.exposure=P.glw*Exposure.k*(1+P.aglow*beat*.3);L.hue=this.displayHue+(E.h-hueBase)*TAU;L.bloom=E.bloom*(1+P.aglow*(beat*1.2+energy*.6));
+    L.echoZoom=E.ezoom*.012*dt*60*(1+P.aspace*beat);L.echoTwist=E.etwist*.02*dt*60;L.time=clock;
     if(!this.paused){
       const sim=dt*P.ts*musicSpeed,n=Math.min(3,Math.ceil(sim/(1/60)-1e-6)),h=sim/Math.max(n,1);
       const g=[P.wx,P.wy];
-      const field={mode:P.field|0,str:P.fs*500*(1+P.afield*(Music.bass*2.5+beat)),g,time:clock};
-      for(let i=0;i<n;i++)Engine.step(h,P,field);
+      const field={mode:E.field|0,str:E.fs*500*(1+P.afield*(Music.bass*2.5+beat)),g,time:clock};
+      Geo.inject(dt,E);
+      for(let i=0;i<n;i++)Engine.step(h,E,field);
     }
     const ps=Input.ptr.size?[...Input.ptr.values()][0]:null,emit=ps?[Input.emitAt[0],Input.emitAt[1],1,.06]:[0,0,0,0];
-    Engine.particles(dt*P.ts,P,emit,clock,paletteUniforms(),this.paused);
+    Engine.particles(dt*P.ts,E,emit,clock,paletteUniforms(),this.paused);
     UI.frame(dt);
     const dpr=Engine.res[0]/VW(),glass=UI.glass(dpr);
-    if(this.rec&&now-this.rec.last>=1000/this.rec.fps){Engine.render(P,L,glass,false);this.rec.ctx.drawImage(cv,0,0,this.rec.c.width,this.rec.c.height);this.rec.last=now}
-    if(this.snap){this.snap=false;Engine.capture(P,L,glass).toBlob(b=>b&&download(b,'dynamic.png'))}
-    Engine.render(P,L,glass,true);
+    if(this.rec&&now-this.rec.last>=1000/this.rec.fps){Engine.render(E,L,glass,false);this.rec.ctx.drawImage(cv,0,0,this.rec.c.width,this.rec.c.height);this.rec.last=now}
+    if(this.snap){this.snap=false;Engine.capture(E,L,glass).toBlob(b=>b&&download(b,'dynamic.png'))}
+    Engine.render(E,L,glass,true);Gov.end(gq);Exposure.sample(dt);
     this.cpu=this.cpu*.9+(performance.now()-t0)*.1;
-    if(UI.open&&UI.tab===6&&now-this.diagT>1000){this.diagT=now;UI.diag.textContent=`${Math.round(this.fps)} fps · CPU ${this.cpu.toFixed(1)} ms · render ${Engine.res.join('×')} · sim ${Engine.sim.join('×')} · ink ${Engine.ink.join('×')} · GPU memory ~${Math.round(Engine.memoryMiB())} MiB · ${gl.getParameter(gl.RENDERER)}`}
+    if(UI.open&&UI.tabId()==='system'&&now-this.diagT>1000){this.diagT=now;UI.diag.textContent=`${Math.round(this.fps)} fps · CPU ${this.cpu.toFixed(1)} ms · render ${Engine.res.join('×')} · sim ${Engine.sim.join('×')} · ink ${Engine.ink.join('×')} · GPU memory ~${Math.round(Engine.memoryMiB())} MiB · ${gl.getParameter(gl.RENDERER)}`}
     if(audio._media&&UI.seek){UI.seek.max=audio.duration||1;if(document.activeElement!==UI.seek)UI.seek.value=audio.position||0}
   },
-  adapt(){   // phone only: if frames stay slow, shed resolution a step at a time
-    if(!NATIVE||this.paused||UI.open&&UI.tab===6)return;
+  adapt(){return;   // superseded by Gov (78_perf.js)
+    return;
     this.slow=this.fps<40?(this.slow||0)+1:0;
     if(this.slow>=6&&P.rscale>.5){this.slow=0;P.rscale=Math.max(.5,+(P.rscale-.1).toFixed(2));Engine.allocate(quality());persist();UI.sync()}
   },

@@ -9,6 +9,7 @@ const Feel={
   peak:new Float32Array(24).fill(.02),lo:0,hi:0,punchL:0,punchH:0,strong:0,weak:0,t:0,beat:0,
   /* Called at the analysis rate: ~375/s on the web worklet, ~125/s from the Android capture. */
   /* hiMode: what the light motor plays. 0 treble, 1 bass (doubles the heavy motor), 2 nothing. */
+  /* mode: 1 Music, 2 Beats, 4 Stream (the music's own bass and treble envelopes, straight to the motors). */
   bands(levels,onsets,mode,hiMode=0){
     const now=performance.now(),dt=clamp((now-(this.t||now))/1000,.001,.1);this.t=now;
     let lo=0,hi=0,kl=0,kh=0;const fall=Math.exp(-dt/8);
@@ -22,6 +23,12 @@ const Feel={
     this.punchL=Math.max(this.punchL*Math.exp(-dt/.04),kl>.15?Math.min(1,.5+kl):0);
     this.punchH=Math.max(this.punchH*Math.exp(-dt/.025),kh>.2?Math.min(1,.3+kh*.8):0);
     this.beat=Math.max(this.punchL,this.beat*Math.exp(-dt/.15));
+    if(mode===4){   // Stream: raw envelopes (levels are already auto-gained), fast attack, 25 ms release
+      let a=0,b=0;for(let i=0;i<6;i++)a+=levels[i]/6;for(let i=9;i<24;i++)b+=levels[i]/15;
+      const sa=Math.pow(clamp(a*1.25,0,1),1.2),sb=Math.pow(clamp(b*1.6,0,1),1.2),r=1-Math.exp(-dt/.025);
+      this.sLo=sa>(this.sLo||0)?sa:this.sLo+(sa-this.sLo)*r;this.sHi=sb>(this.sHi||0)?sb:this.sHi+(sb-this.sHi)*r;
+      this.strong=clamp(this.sLo+this.punchL*.25,0,1);this.weak=hiMode===2?0:hiMode===1?this.strong*.7:clamp(this.sHi+this.punchH*.2,0,1);return;
+    }
     this.strong=mode===2?this.punchL:clamp(this.lo*this.lo*.8+this.punchL*.8,0,1);
     this.weak=hiMode===2?0:hiMode===1?this.strong*.7:mode===2?this.punchH*.8:clamp(Math.pow(this.hi,1.6)*.7+this.punchH*.5,0,1);
   },

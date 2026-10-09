@@ -16,9 +16,9 @@ UI={
       const panel=this.panels[i];
       if(id==='music')this.buildMusicHead(panel);
       let group='';
-      for(const d of SCHEMA.params){if(d.tab!==id)continue;
+      for(const d of SCHEMA.params){if(d.tab!==id||d.hide)continue;
         if(d.g!==group){group=d.g;const h=el('h4');h.textContent=group;h.dataset.group=group;panel.append(h)}
-        const row=d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):d.t==='p'?this.palette(d):this.slider(d);
+        const row=d.t==='g'?this.geoPicker(d):d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):d.t==='p'?this.palette(d):this.slider(d);
         row.dataset.s=(d.l+' '+d.g+' '+label+' '+d.k+' '+(d.o||[]).join(' ')).toLowerCase();row.dataset.g=d.g;panel.append(row);this.rows.push(row);
         if(d.help){const p=el('p','help');p.textContent=d.help;row.append(p)}
       }
@@ -26,6 +26,7 @@ UI={
       if(id==='system')this.buildSystem(panel);
     }
     this.buildDock();
+    this.hudEl=el('div');this.hudEl.id='hud';$('#sh').insertBefore(this.hudEl,$('#tabs'));
     $('#q').addEventListener('input',()=>this.search());
     $('#q').addEventListener('keydown',e=>{if(e.key==='Escape'){$('#q').value='';this.search()}});
     bd.addEventListener('scroll',()=>{this.layoutDirty=true;if(this.armed&&!this.armed.dragging)this.disarm()},{passive:true});
@@ -35,6 +36,17 @@ UI={
     this.renderCards();this.sync();if(st.o)this.show(st.t|0,true);
     this.built=true;this.presetChanged();
   },
+  /* Stats strip (top of the sheet) and title line: frame rate, quality, tempo with a beat lamp, section, source. */
+  hud(){
+    const M=Music,on=M.active(),fps=Math.round(App.fps),hz=Gov.targetHz()||Gov.refresh;
+    const sec={calm:'Calm',build:'Build-up',full:'Full'}[M.section.state]||'';
+    const lock=M.conf>.55?'locked':M.conf>.25?'finding':'free';
+    const src=M.native?'Phone audio':{mic:'Mic',desktop:'Tab audio',file:'File',stream:'Stream'}[audio.state]||'';
+    if(this.hudEl)this.hudEl.innerHTML=`<span><b>${fps}</b> fps <em>/ ${hz}</em></span><span>${Gov.label()}</span>`+
+      (on?`<span class="bpm ${lock}"><i></i><b>${M.bpm?Math.round(M.bpm):'—'}</b> bpm</span><span>${sec}${M.drop>.3?' · <b>DROP</b>':''}</span><span>${src}</span>`:'<span class="dim">No music · Music tab → Listen to</span>');
+    $('#fps').textContent=P.st?(on&&M.bpm?Math.round(M.bpm)+' bpm · ':'')+fps+' fps':'';
+  },
+  tabId(){return SCHEMA.tabs[this.tab]?.[0]||''},
   persistUi(){store.set('dynamic.ui',{o:this.open?1:0,t:Math.max(this.tab,0),l:this.lastTab,sc:this.scroll,cat:this.cat})},
 
   /* ---------- controls ---------- */
@@ -93,6 +105,20 @@ UI={
       b.onclick=()=>this.change('pal',i);wrap.append(b)});
     this.upd.push(()=>{[...wrap.children].forEach((b,i)=>b.classList.toggle('on',i===P.pal));row.classList.toggle('chg',P.pal!==B.pal)});return row;
   },
+  /* Geometry picker: family chips over a grid of live thumbnails (drawn lazily, a few per frame). */
+  geoPicker(d){
+    const row=el('div','geo'),fams=el('div','sg'),grid=el('div','gg');fams.style.margin='0 0 10px';row.append(fams,grid);
+    let fam=store.get('dynamic.geofam','Sacred');
+    const render=()=>{grid.replaceChildren();[...fams.children].forEach(b=>b.classList.toggle('on',b.textContent===fam));
+      GEO.forEach((g,i)=>{if(i&&fam!=='All'&&g.f!==fam)return;
+        const b=el('button','gc');b.dataset.i=i;b.setAttribute('aria-label',g.n);b.innerHTML=i?'<img alt=""><span></span>':'<span></span>';b.querySelector('span').textContent=i?g.n:'No pattern';
+        b.onclick=()=>{this.change('geo',i);Geo.drawT=0};grid.append(b)});
+      this.loadThumbs(grid);this.sync()};
+    ['All',...GEO_FAMILIES].forEach(f=>{const b=el('button','ch');b.textContent=f;b.onclick=()=>{fam=f;store.set('dynamic.geofam',f);render()};fams.append(b)});
+    this.upd.push(()=>{[...grid.children].forEach(b=>b.classList.toggle('on',+b.dataset.i===(P.geo|0)));row.classList.toggle('chg',P.geo!==B.geo)});
+    this.geoRender=render;render();return row;
+  },
+  loadThumbs(grid){const bs=[...grid.querySelectorAll('img')];let k=0;const step=()=>{if(!this.open||this.tabId()!=='geometry'){setTimeout(step,300);return}const t0=performance.now();while(k<bs.length&&performance.now()-t0<10){const im=bs[k++],i=+im.parentNode.dataset.i;im.src=Geo.thumb(i)}if(k<bs.length)setTimeout(step,30)};step()},
   vis(row,d){if(!d.when)return;this.upd.push(()=>{let ok=true;for(const k in d.when){const w=d.when[k];ok=ok&&(w==='on'?P[k]>0:w.includes(P[k]))}row.hidden=!ok||row.dataset.miss==='1';row.dataset.when=ok?'':'1'})},
   trackColors(kind){
     const hl=(h,s=.85,l=58)=>`hsl(${fract(h)*360} ${s*100}% ${l}%)`;
@@ -150,11 +176,15 @@ UI={
       const b=el('button','c',svgIcon(PRESETS.icons[pr.i]||PRESETS.icons.user)+`<span></span>`+(favorites.has(pr.n)?'<i class="fav">★</i>':''));
       b.querySelector('span').textContent=pr.n;b.setAttribute('aria-label','Load '+pr.n);
       b.style.background=`linear-gradient(0deg,#000a,#0000 75%),linear-gradient(135deg,${g(0)},${g(.5)},${g(1)})`;
+      if(v.geo>0){b.classList.add('gp');b.dataset.geo=v.geo;b.style.setProperty('--g1',g(0));b.style.setProperty('--g2',g(.6))}
       b.classList.toggle('on',i===current);b.onclick=()=>{applyPreset(i,{animate:false});Engine.snapshot()};grid.append(b);
     });
+    this.cardThumbs(grid);
     if(this.panels&&this.panels[0])this.panels[0].hidden=q?!grid.children.length:this.tab!==0;
     this.layoutDirty=true;
   },
+  /* Geometry presets: the pattern, tinted with the preset's colours, drawn a few per frame. */
+  cardThumbs(grid){const cs=[...grid.querySelectorAll('.gp')];let k=0;const step=()=>{const t0=performance.now();while(k<cs.length&&performance.now()-t0<8){const c=cs[k++];c.style.backgroundImage=`linear-gradient(0deg,#000c,#0000 70%),url(${Geo.thumb(+c.dataset.geo)}),linear-gradient(135deg,var(--g1),var(--g2))`;c.style.backgroundBlendMode='normal,screen,normal';c.style.backgroundSize='cover';c.style.backgroundPosition='center'}if(k<cs.length)setTimeout(step,20)};setTimeout(step,0)},
   cardRGB(v,t){const S=STOPS[v.pal|0],h=v.h+v.hr*t,c=S?stopsMix(S,h):hsv(h,1,1),l=c[0]*.299+c[1]*.587+c[2]*.114;return c.map(x=>(l+(x-l)*Math.max(v.s*1.25,.2))*(.9-t*.3))},
   presetChanged(){
     const pr=allPresets()[current];if(!pr)return;
@@ -181,7 +211,7 @@ UI={
     const pick=(label,kind,fn)=>{const b=el('button','ch');b.textContent=label;b.dataset.kind=kind;b.onclick=async()=>{try{await fn()}catch(e){notice(e.message||String(e))}};src.append(b)};
     pick('Off','off',()=>{if(NATIVE)NATIVE.stopPlaybackCapture();return audio.stop()});
     pick('Microphone','mic',()=>{if(NATIVE)NATIVE.stopPlaybackCapture();return audio.select('mic')});
-    pick(NATIVE?'Phone audio':'PC / tab audio','desktop',()=>NATIVE?(audio.stop(),NATIVE.startPlaybackCapture()):audio.select('desktop'));
+    pick(NATIVE?'Phone audio':'Tab / Spotify audio ★','desktop',()=>NATIVE?(audio.stop(),NATIVE.startPlaybackCapture()):audio.select('desktop'));
     pick('File','file',()=>{const f=el('input');f.type='file';f.accept='audio/*,video/*';f.onchange=()=>f.files[0]&&audio.select('file',{file:f.files[0]}).catch(e=>notice(e.message));f.click()});
     pick('Stream URL','stream',()=>this.dialog('Play a stream',d=>{const u=this.input(d,'HTTP(S) audio URL','');this.button(d,'Play',async()=>{await audio.select('stream',{url:u.value.trim()});this.closeDialog()})}));
     this.srcBtns=src;
@@ -205,6 +235,7 @@ UI={
     this.spUi={img,title:info.querySelector('strong'),artist:info.querySelectorAll('p')[0],status:info.querySelector('.st'),prev,play,next};
   },
   spotifyState(s){
+    const key=s.track?(s.track.title+'|'+s.track.artist):'';if(this.sp&&key&&key!==this.spKey&&Music.active()){Music.resetSync();Director.reset()}this.spKey=key;   // new song: re-lock the beat at once
     this.sp=s;const u=this.spUi;if(!u)return;
     u.status.textContent=s.error||s.status||'Optional. Adds track info, controls and album colours.';u.title.textContent=s.track?.title||'';u.artist.textContent=s.track?.artist||'';
     const art=s.artwork||s.track?.artwork;if(art&&art!==this.art){this.art=art;u.img.src=art;albumPalette(art)}
@@ -218,10 +249,10 @@ UI={
     const btn=(t,f)=>{const b=el('button','ch');b.textContent=t;b.onclick=()=>Promise.resolve(f()).catch(e=>notice(e.message||String(e)));row.append(b);return b};
     btn('Save image',()=>{App.snap=true});
     this.recBtn=btn('Record video',()=>App.record());
-    if(!NATIVE)btn('Fullscreen',()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen());
     const h2=el('h4');h2.textContent='Reset';panel.append(h2);
     const row2=el('div','sg extra');panel.append(row2);
     const r=el('button','ch');r.textContent='Sharp liquid glass';r.onclick=()=>{P.ref=2;P.blr=0;P.dsp=.18;P.bzl=1;persist();this.sync()};
+    const r3=el('button','ch');r3.textContent='Default look';r3.onclick=()=>{for(const k of SYSTEM_KEYS)if(!PDEF[k].quality&&PDEF[k].tab!=='music'||['dir','shock','msn','aring','abeat','aspace','afield','aglow','aspeed','bpu'].includes(k))P[k]=D[k];Exposure.reset();persist();this.sync();notice('Look reset to defaults.',2500)};row2.append(r3);
     const r2=el('button','ch');r2.textContent='Default quality';r2.onclick=()=>{for(const k of SYSTEM_KEYS)if(PDEF[k].g==='Quality')P[k]=D[k];Engine.allocate(quality(),true);persist();this.sync()};
     row2.append(r,r2);
     this.diag=el('p','help extra');panel.append(this.diag);
@@ -245,7 +276,7 @@ UI={
   },
   shut(){if(this.tab>=0)this.scroll[this.tab]=$('#bd').scrollTop;$('#sh').classList.remove('o');this.open=false;this.disarm();$('#kp').classList.remove('on');$('#kt').classList.remove('on');this.layoutDirty=true;this.persistUi()},
   buildDock(){
-    const dock=$('#dock'),I={p:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',t:'M4 8h9M17 8h3M4 16h3M11 16h9M15 5v6M9 13v6',y:SCHEMA.tabs[2][2],u:'M8 5L3 10l5 5M3 10h10a7 7 0 0 1 7 7',z:'M8 5v14M16 5v14',c:'M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5'};
+    const dock=$('#dock'),I={p:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',t:'M4 8h9M17 8h3M4 16h3M11 16h9M15 5v6M9 13v6',y:SCHEMA.tabs.find(t=>t[0]==='space')[2],u:'M8 5L3 10l5 5M3 10h10a7 7 0 0 1 7 7',z:'M8 5v14M16 5v14',c:'M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5',f:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'};
     const add=(id,label,fn)=>{const b=el('button','k',svgIcon(I[id])+(id==='y'?'<i id="sy"></i>':''));b.id='k'+id;b.setAttribute('aria-label',label);b.onclick=()=>fn(b);dock.append(b);return b};
     add('p','Presets',()=>this.show(0));
     add('t','Settings',()=>this.show(this.lastTab));
@@ -253,6 +284,9 @@ UI={
     add('u','Undo',()=>{if(!Engine.restore())notice('Nothing to undo.',1500)});
     add('z','Pause',b=>{App.paused=!App.paused;b.classList.toggle('on',App.paused);b.querySelector('path').setAttribute('d',App.paused?'M8 5l11 7-11 7z':I.z)});
     add('c','Clear',()=>Engine.clear());
+    if(!NATIVE&&document.documentElement.requestFullscreen){const I2='M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',I3='M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
+      const fb=add('f','Fullscreen',()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{}));fb.innerHTML=svgIcon(I2);
+      document.addEventListener('fullscreenchange',()=>{fb.innerHTML=svgIcon(document.fullscreenElement?I3:I2);fb.classList.toggle('on',!!document.fullscreenElement)})}
     this.upd.push(()=>{$('#sy').textContent=P.space?String(P.space):''});
   },
 
@@ -312,7 +346,7 @@ UI={
     gl.bindTexture(gl.TEXTURE_2D,this.mask);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
   }
 };
-function quality(){const q={};for(const k of QUALITY_KEYS)q[k]=P[k];return q}
+function quality(){const q={};for(const k of QUALITY_KEYS)q[k]=P[k];return Gov.quality(q)}
 async function albumPalette(url){
   try{const img=new Image();img.crossOrigin='anonymous';await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;img.src=url});
     const c=el('canvas');c.width=c.height=32;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0,32,32);const d=x.getImageData(0,0,32,32).data,bins=new Map();

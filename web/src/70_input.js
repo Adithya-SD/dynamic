@@ -22,7 +22,9 @@ const Input={
   },
   /* Screen point (CSS px, y down) with screen velocity (y up). */
   emit(x,y,vx,vy,rgb,r){
-    const n=Math.max(1,P.sym|0),cx=VW()/2,cy=VH()/2,w2=1/(Engine.world*Engine.world);
+    const n=Math.max(1,(Director.E.sym||P.sym)|0),cx=VW()/2,cy=VH()/2,w2=1/(Engine.world*Engine.world);
+    // Copies share one ink budget (beyond what you set yourself), so music symmetry spreads ink instead of multiplying it.
+    const extra=n/Math.max(1,P.sym|0);if(extra>1)rgb=rgb.map(z=>z/Math.pow(extra,.8));
     for(let k=0;k<n;k++){const a=TAU*k/n,c=Math.cos(a),s=Math.sin(a);
       for(let m=0;m<=(P.mir?1:0);m++){
         const f=m?-1:1,X=(x-cx)*f,Y=(cy-y),U=vx*f,
@@ -75,21 +77,41 @@ const Input={
   }
 };
 
-/* Music: 24 log-spaced bands. Band i circles at radius ∝ i (bass at the centre, treble at the rim);
-   loudness sets how fast and how hard it pushes. Onsets fire independent bursts, no fixed tempo. */
+/* Music: 24 log-spaced bands. Band i circles at radius ∝ i (bass at the centre, treble at the rim); loudness sets
+   how fast and how hard it pushes; band onsets fire bursts. On top: a beat clock (42_beat.js) that predicts beats a
+   little ahead (Sync offset) so pulses land on the beat, instant kick/snare/hat hits, and song sections with drops. */
 let musicSpeed=1;
 const audio=new DynamicsAudio();
 const Music={
   levels:new Float32Array(24),angles:new Float64Array(24),prev:Array(24).fill(null),events:[],last:0,energy:0,bass:0,beat:0,
+  tracker:new BeatTracker(),section:new SectionTracker(),nsig:DynamicsAudio.createSignal(),
+  kick:0,snare:0,hat:0,complexity:0,rate:0,phase:0,bpm:0,conf:0,pulse:0,down:0,drop:0,onset:0,offset:null,beats:0,dropN:0,lastDrop:0,
   init(){
-    audio.onBands=d=>this.ingest(d.levels,d.onsets);
-    if(NATIVE){window.__nativeBands=(l,o)=>this.ingest(l,o);window.__nativeAudio=(on,text)=>{this.native=on;UI.audioStatus.textContent=text;[...UI.srcBtns.children].forEach(b=>b.classList.toggle('on',on?b.dataset.kind==='desktop':b.dataset.kind==='off'))}}
-    audio.onState=s=>{const ok=['mic','desktop','file','stream'].includes(s.state);UI.audioStatus.textContent=s.state==='error'?s.detail:ok?{mic:'Listening to the microphone',desktop:'Listening to shared audio',file:'Playing your file',stream:'Playing the stream'}[s.state]+(s.detail?.degraded?' (analyser fallback, slower)':''):'Pick a source. Low notes draw near the centre, high notes near the edge; loudness drives the motion.';
+    audio.onBands=d=>this.ingest(d);
+    audio.onSeek=()=>this.resetSync();
+    if(NATIVE){window.__nativeBands=(l)=>{const t=performance.now()/1000,s=this.nsig.push(l,t,null);this.ingest({time:t,levels:s.levels,onsets:s.onsets,odf:s.odf,raw:l})};
+      window.__nativeAudio=(on,text)=>{this.native=on;this.resetSync();UI.audioStatus.textContent=text;[...UI.srcBtns.children].forEach(b=>b.classList.toggle('on',on?b.dataset.kind==='desktop':b.dataset.kind==='off'))}}
+    audio.onState=s=>{const ok=['mic','desktop','file','stream'].includes(s.state);this.resetSync();
+      UI.audioStatus.textContent=s.state==='error'?s.detail:ok?{mic:'Listening to the microphone',desktop:'Listening to shared audio',file:'Playing your file',stream:'Playing the stream'}[s.state]+(s.detail?.degraded?' (analyser fallback, slower)':'')+'. Finding the beat…':'Pick a source. Tab audio is best: Chrome → share a tab (or Entire screen for apps like Spotify) and tick “Share audio”.';
       [...UI.srcBtns.children].forEach(b=>b.classList.toggle('on',b.dataset.kind===(ok?s.state:'off')));UI.fileRow.hidden=!['file','stream'].includes(s.state)};
   },
   native:false,
   active(){return this.native||['mic','desktop','file','stream'].includes(audio.state)},
-  ingest(levels,onsets){this.levels.set(levels);const rm=P.rmode|0;Feel.bands(levels,onsets,rm,P.rhi|0);if((rm===1||rm===2)&&!this.native)Pad.rumble(Feel.strong*P.rgain,Feel.weak*P.rgain);this.last=performance.now();for(let b=0;b<24;b++)if(onsets[b]>0)this.events.push([b,onsets[b]]);if(this.events.length>256)this.events.splice(0,this.events.length-256)},
+  /* New song or a seek: forget tempo and sections so the clock re-locks within a couple of seconds. */
+  resetSync(){this.tracker.reset();this.section.reset();this.offset=null;this.conf=0;this.bpm=0},
+  ingest(d){
+    const levels=d.levels,onsets=d.onsets,rm=P.rmode|0;
+    this.levels.set(levels);
+    Feel.bands(levels,onsets,rm,P.rhi|0,d.raw);if(rm&&rm!==3&&!this.native)Pad.rumble(Feel.strong*P.rgain,Feel.weak*P.rgain);
+    this.last=performance.now();
+    // Audio clock → page clock. Messages arrive late, never early, so the smallest offset is the true one (slow upward drift allowed).
+    const off=performance.now()/1000-d.time;this.offset=this.offset==null||off<this.offset?off:this.offset+(off-this.offset)*.002;
+    this.tracker.push(d.time,d.odf);this.section.push(d.time,d.raw||levels);
+    // Instant hits: each flux range against its own running mean.
+    const m=this.tracker.mean,hit=(v,mean,th)=>Math.min(1,Math.max(0,(v/Math.max(mean,1e-4)-th)/(th*1.5)));
+    this.kick=Math.max(this.kick,hit(d.odf[1],m[1],2.2));this.snare=Math.max(this.snare,hit(d.odf[2],m[2],2));this.hat=Math.max(this.hat,hit(d.odf[3],m[3],2));
+    for(let b=0;b<24;b++)if(onsets[b]>0)this.events.push([b,onsets[b]]);if(this.events.length>256)this.events.splice(0,this.events.length-256);
+  },
   frame(dt){
     const live=performance.now()-this.last<250;
     if(!live)for(let i=0;i<24;i++)this.levels[i]*=Math.exp(-dt*8);
@@ -101,17 +123,39 @@ const Music={
       if(lv>.02&&!App.paused&&P.aring>0){
         const n=pv?Math.max(1,Math.min(4,Math.ceil(Math.hypot(pt[0]-pv[0],pt[1]-pv[1])/10))):1,f=lv*P.frc*.009*P.aring*dt*60/n;
         for(let k=1;k<=n;k++){const t=k/n,x=pv?pv[0]+(pt[0]-pv[0])*t:pt[0],y=pv?pv[1]+(pt[1]-pv[1])*t:pt[1];
-          Input.emit(x,y,-Math.sin(a)*f,Math.cos(a)*f,inkColor(i,lv*180,x/W,1-y/H,i).map(z=>z*.28*lv*dt*60/n*P.aring),r*.22)}
+          Input.emit(x,y,-Math.sin(a)*f,Math.cos(a)*f,inkColor(i,lv*180,x/W,1-y/H,i).map(z=>z*.13*lv*dt*60/n*P.aring),r*.22)}
       }
       this.prev[i]=pt;
     }
-    this.energy=e/24;this.bass=bass;this.beat*=Math.exp(-dt/.14);
+    this.energy=e/24;this.bass=bass;
+    const T=this.tracker,sec=this.section;
+    this.kick*=Math.exp(-dt/.09);this.snare*=Math.exp(-dt/.08);this.hat*=Math.exp(-dt/.05);
+    this.onset*=Math.exp(-dt/.14);this.pulse*=Math.exp(-dt/Math.max(.08,.3*60/Math.max(60,T.bpm||120)));this.down*=Math.exp(-dt/.35);
+    this.downbeat=false;this.onBeat=false;
+    if(live&&this.offset!=null){
+      const t=performance.now()/1000-this.offset+P.alat/1000,b=T.poll(t);
+      this.phase=T.phase(t);this.bpm=T.bpm;this.conf=T.conf;
+      if(b&&T.conf>.25){this.pulse=Math.max(this.pulse,.35+.65*T.conf);this.beats++;this.onBeat=true;if(b===2){this.down=1;this.downbeat=true}const lamp=UI.hudEl&&UI.hudEl.querySelector('.bpm i');if(lamp){lamp.classList.remove('hit');void lamp.offsetWidth;lamp.classList.add('hit')}}
+      if(sec.events.length){sec.events.length=0;this.drop=1;this.dropN++;this.lastDrop=performance.now();T.refresh()}
+    }else{this.conf*=Math.exp(-dt*2);this.phase=fract(this.phase+dt*2)}
+    this.drop*=Math.exp(-dt/.9);
+    // Complexity: how many band onsets per second and how much of the spectrum is busy. Drives intricacy.
+    {let busy=0;for(let i=0;i<24;i++)if(this.levels[i]*P.msn>.22)busy++;
+     this.rate+=(this.events.length/Math.max(dt,1e-3)-this.rate)*(1-Math.exp(-dt/1.2));
+     const c=live?clamp(this.rate/55,0,1)*.6+busy/24*.4:0;this.complexity+=(c-this.complexity)*(1-Math.exp(-dt/(c>this.complexity?1.2:3)))}
     let n=0;
-    while(this.events.length&&n++<64){const[b,s]=this.events.shift(),lv=Math.min(1,s*P.msn);this.beat=Math.max(this.beat,lv);
+    while(this.events.length&&n++<64){const[b,s]=this.events.shift(),lv=Math.min(1,s*P.msn);this.onset=Math.max(this.onset,lv);
       if(!P.bpu||App.paused)continue;
       const a=this.angles[b]+b*GOLDEN_ANGLE,R=S*(.025+.42*b/23),x=W/2+Math.cos(a)*R,y=H/2-Math.sin(a)*R,f=P.frc*.013*lv*P.abeat;
-      Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(b,150,x/W,1-y/H,b).map(z=>z*.2*lv),r*.3)}
-    musicSpeed=live?1+this.energy*.6:1;
+      Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(b,150,x/W,1-y/H,b).map(z=>z*.12*lv),r*.3)}
+    // One pulse for everything: predicted beats when the clock is sure, raw onsets when it is not (ambient, rubato).
+    const c=Math.min(1,this.conf*1.3);
+    this.beat=Math.max(c*this.pulse,(1-c*.7)*this.onset,this.drop);
+    // Every confident beat throws a symmetric ring of bursts across the whole screen; downbeats and drops throw wider ones.
+    if(this.onBeat&&P.bpu&&!App.paused&&P.abeat>0){
+      const k=this.downbeat?8:6,R0=S*(this.downbeat?.3:.18)*(1+this.bass),f=P.frc*.02*P.abeat*(.6+this.bass)*(this.downbeat?1.4:1),rot=this.beats*GOLDEN_ANGLE;
+      for(let i=0;i<k;i++){const a=rot+i*TAU/k,x=W/2+Math.cos(a)*R0,y=H/2-Math.sin(a)*R0;Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(i*.7+this.beats*.3,200,x/W,1-y/H,i).map(z=>z*.16*this.pulse),r*.35)}
+    }
     if(UI.bands&&!UI.bands.hidden&&UI.open)for(let i=0;i<24;i++)UI.bands.children[i].style.setProperty('--l',Math.min(1,this.levels[i]*P.msn).toFixed(3));
   }
 };

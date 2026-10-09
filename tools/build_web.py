@@ -48,7 +48,7 @@ def build():
     out.write_text(html, encoding='utf-8')
     print(f'Built {out.relative_to(ROOT)}: {len(html.encode()):,} bytes')
 
-PAD_SOURCES = ['src/00_util.js', 'src/40_audio.js', 'src/46_pad.js', 'pad/main.js']
+PAD_SOURCES = ['src/00_util.js', 'src/40_audio.js', 'src/42_beat.js', 'src/46_pad.js', 'pad/main.js']
 
 def build_pad():
     """Dynamic Pad: the controller-only music feeler. Shares util, audio analysis and the controller core."""

@@ -31,7 +31,7 @@ const Engine={
     if(programIfReady(vs,fs,want)){this.live[key]=want;return want}
     return this.live[key]||(this.live[key]=want);
   },
-  BASE:['copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
+  BASE:['copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
   /* Compile everything the first frame needs, in parallel. Other spaces follow quietly, one at a time. */
   async warm(onProgress){
     const d=this.spaceDefs(Space.u.uSpace),list=this.BASE.filter(([,f])=>f!=='compose.frag').map(x=>[...x,'']);
@@ -48,7 +48,7 @@ const Engine={
     const a=rw/rh,w=Q.world,max=gl.getParameter(gl.MAX_TEXTURE_SIZE);
     const dims=(short)=>{const s=Math.min(short*w,max);return a>=1?[Math.min(max,Math.round(s*a)),Math.round(s)]:[Math.round(s),Math.min(max,Math.round(s/a))]};
     const sim=dims(Q.sim),ink=dims(Math.min(2048,Math.round(Math.min(rw,rh)*Q.inkq)));
-    const bytes=sim[0]*sim[1]*(4*2+2*2+2+2)+ink[0]*ink[1]*8*3+rw*rh*8*4+ink[0]*ink[1]*.36*8+PART_SIDE*PART_SIDE*32;
+    const bytes=sim[0]*sim[1]*(4*2+2*2+2+2)+ink[0]*ink[1]*8*3+rw*rh*8*4+ink[0]*ink[1]*8+PART_SIDE*PART_SIDE*32;
     return{res:[rw,rh],sim,ink,bytes,world:w};
   },
   /* (Re)allocate. Keeps ink across size changes; on failure the previous allocation stays live. */
@@ -62,7 +62,7 @@ const Engine={
       const wrap={wrap:this.wrap};
       const n={};
       if(force||!simSame){n.vel=PR(...s.sim,'rg16f',wrap);n.prs=PR(...s.sim,'r16f',wrap);n.div=T(...s.sim,'r16f',wrap);n.crl=T(...s.sim,'r16f',wrap)}
-      if(force||!inkSame){n.dye=PR(...s.ink,'rgba16f',wrap);n.fwd=T(...s.ink,'rgba16f',wrap);n.ptx=T(Math.round(s.ink[0]*.6),Math.round(s.ink[1]*.6),'rgba16f');
+      if(force||!inkSame){n.dye=PR(...s.ink,'rgba16f',wrap);n.fwd=T(...s.ink,'rgba16f',wrap);n.ptx=T(...s.ink,'rgba16f');
         if(this.dye){pass('copy.frag',{uSrc:this.dye.r,uScale:1},n.dye.r)}}
       if(force||!resSame){n.scene=T(...s.res,'rgba16f');n.lit=T(...s.res,'rgba16f');n.bloom=[];let bw=s.res[0],bh=s.res[1];for(let i=0;i<5;i++){bw=Math.max(1,bw>>1);bh=Math.max(1,bh>>1);n.bloom.push(T(bw,bh,'rgba16f'))}}
       for(const k in n){const old=this[k];if(Array.isArray(old))old.forEach(kill);else kill(old);this[k]=n[k]}
@@ -99,7 +99,7 @@ const Engine={
     pass('vorticity.frag',{uVel:this.vel.r,uCurl:this.crl,uTx:tx,uCurlStr:P.curl*REF*this.world/Math.min(this.sim[0],this.sim[1]),uDt:dt,uMaxVel:MAX_VEL},this.vel.w);this.vel.swap();
     pass('divergence.frag',{uVel:this.vel.r,uTx:tx,uWalls:this.wrap?0:1},this.div);
     pass('copy.frag',{uSrc:this.prs.r,uScale:.8},this.prs.w);this.prs.swap();
-    for(let i=0;i<P.it;i++){pass('pressure.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx},this.prs.w);this.prs.swap()}
+    for(let i=0,it=Gov.iters(dt);i<it;i++){pass('pressure.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx},this.prs.w);this.prs.swap()}
     pass('gradient.frag',{uP:this.prs.r,uVel:this.vel.r,uTx:tx},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.vel.r,uRefTx:ref,uDt:dt,uDiss:P.vel},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.dye.r,uRefTx:ref,uDt:dt,uDiss:0},this.fwd);
@@ -122,7 +122,7 @@ const Engine={
   /* Display: compose (fold once) → material → echo → bloom → final (glass, film). */
   render(P,look,glass,toScreen=true,out=null){
     const res=this.res,sp=Space.u;
-    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
+    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.5,uVib:P.vib,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
     let base=this.scene;
     if(P.rel>0||P.met>0||P.irs>0||P.fre>0){pass('material.frag',{uScene:this.scene,uTx:[1/res[0],1/res[1]],uRelief:P.rel,uSharp:P.spc,uLight:P.lgt*Math.PI/180,uMetal:P.met,uIris:P.irs,uRim:P.fre,uShine:0},this.lit);base=this.lit}
     if(P.echo>0){

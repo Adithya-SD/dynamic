@@ -63,3 +63,45 @@ H.calibrate=async function(names,{target=.15,p99max=.96,frames=50,after=40}={}){
   }
   return out;
 };
+/* GPU time per stage via EXT_disjoint_timer_query_webgl2 (gl.finish does not block on ANGLE/D3D). */
+H.gpu=async function(n=30){
+  const ext=gl.getExtension('EXT_disjoint_timer_query_webgl2');if(!ext)return'no timer ext';
+  const field={mode:P.field|0,str:P.fs*500,g:[P.wx,P.wy],time:clock},L=App.look,glass=UI.glass(Engine.res[0]/innerWidth),qs=[];
+  const time=(k,fn)=>{const q=gl.createQuery();gl.beginQuery(ext.TIME_ELAPSED_EXT,q);fn();gl.endQuery(ext.TIME_ELAPSED_EXT);qs.push([k,q])};
+  for(let i=0;i<n;i++){
+    time('stamps',()=>{Input.taps.push([innerWidth/2,innerHeight/2,300,200,1,1]);Input.frame(1/60);Music.frame(1/60);Engine.flushStamps(P.bt)});
+    time('step',()=>Engine.step(1/60,P,field));
+    time('particles',()=>Engine.particles(1/60,P,[0,0,0,0],clock,paletteUniforms(),false));
+    time('render',()=>Engine.render(P,L,glass,true));
+    await new Promise(r=>requestAnimationFrame(r));
+  }
+  await new Promise(r=>setTimeout(r,300));const t={};
+  for(const[k,q]of qs){for(let w=0;w<50&&!gl.getQueryParameter(q,gl.QUERY_RESULT_AVAILABLE);w++)await new Promise(r=>setTimeout(r,20));t[k]=(t[k]||0)+gl.getQueryParameter(q,gl.QUERY_RESULT)/1e6/n;gl.deleteQuery(q)}
+  for(const k in t)t[k]=+t[k].toFixed(2);t.total=+Object.values(t).reduce((a,b)=>a+b,0).toFixed(2);
+  return{res:Engine.res,sim:Engine.sim,preset:allPresets()[current].n,gpu:gl.getParameter(gl.RENDERER).slice(0,60),...t};
+};
+/* Raw pattern art (no fluid): every geometry pattern as drawn into the texture. */
+H.geoArt=async function({name='geoart',cols=8,w=200,from=1,to=GEO.length}={}){
+  const n=to-from,rows=Math.ceil(n/cols),c=document.createElement('canvas');c.width=cols*w;c.height=rows*w;const x=c.getContext('2d');x.fillStyle='#000';x.fillRect(0,0,c.width,c.height);x.font='600 12px system-ui';
+  for(let k=0;k<n;k++){const i=from+k,t=document.createElement('canvas');t.width=t.height=w;Geo.paint(t.getContext('2d'),i,4,w,1.4);const cx=(k%cols)*w,cy=Math.floor(k/cols)*w;x.drawImage(t,cx,cy);x.fillStyle='#fff';x.fillText(i+' '+GEO[i].n,cx+4,cy+14)}
+  const b=await new Promise(r=>c.toBlob(r,'image/jpeg',.85));await fetch('/shot?name='+name,{method:'POST',body:b});return name;
+};
+/* Patterns as they look in the app: fluid, palette, a few seconds of simulated music beats. */
+H.geoLive=async function(list,{name='geolive',cols=4,w=360,frames=150,preset}={}){
+  const rows=Math.ceil(list.length/cols),h=Math.round(w*cv.height/cv.width),c=document.createElement('canvas');c.width=cols*w;c.height=rows*h;const x=c.getContext('2d');x.font='600 13px system-ui';
+  for(let k=0;k<list.length;k++){this.prep(preset||allPresets()[0].n);if(typeof list[k]==='object')Object.assign(P,list[k]);else P.geo=list[k];
+    this.run(frames,f=>{const b=(f*frames)%30<1;Music.beat=b?1:Music.beat*.9;Music.onBeat=b});
+    x.drawImage(this.grab(),(k%cols)*w,Math.floor(k/cols)*h,w,h);x.fillStyle='#000a';x.fillRect((k%cols)*w,Math.floor(k/cols)*h,w,18);x.fillStyle='#fff';x.fillText(typeof list[k]==='object'?JSON.stringify(list[k]).slice(0,48):GEO[list[k]].n,(k%cols)*w+5,Math.floor(k/cols)*h+13)}
+  const b=await new Promise(r=>c.toBlob(r,'image/jpeg',.85));await fetch('/shot?name='+name,{method:'POST',body:b});return name;
+};
+/* End-to-end: play a WAV through the real audio pipeline in real time; log the music state and snap frames. */
+H.live=async function(url,{preset='Flower of Life',start=0,snaps=[],dur=20,name='live',log=true}={}){
+  const i=allPresets().findIndex(x=>x.n===preset);applyPreset(i);Engine.clear();UI.hidden=true;
+  const blob=await new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('GET',url);x.responseType='blob';x.onload=()=>ok(x.response);x.onerror=no;x.send()});await audio.select('file',{file:new File([blob],'t.wav',{type:'audio/wav'})});
+  audio._media.currentTime=start;Music.resetSync();
+  const rows=[],shots=[],t0=performance.now();let k=0;
+  while((performance.now()-t0)/1000<dur){await new Promise(r=>setTimeout(r,250));const st=audio._media.currentTime;
+    if(log)rows.push([st.toFixed(1),Math.round(Music.bpm),Music.conf.toFixed(2),Music.section.state,Music.dropN,Exposure.k.toFixed(2),(Exposure.top||0).toFixed(2),(Exposure.p98||0).toFixed(2),(Exposure.p50||0).toFixed(2),Music.complexity.toFixed(2),Math.round(App.fps)].join(' '));
+    if(k<snaps.length&&st>=snaps[k]){await this.snap(name+'_'+k,640);shots.push(st.toFixed(1));k++}}
+  await audio.stop();return{shots,rows:rows.filter((_,j)=>j%2===0)};
+};
