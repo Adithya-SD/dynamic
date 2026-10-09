@@ -7,7 +7,7 @@
    Exposure: four times a second a 16×16 sample of the composed frame is read back asynchronously; the brightest
    quarter is steered towards a fixed level, so a sparse frame is not blown out and a dense one is not pushed white. */
 const Gov={
-  level:0,refresh:60,cap:0,iv:[],queries:[],gpu:0,fps:0,slowN:0,fastN:0,last:0,tLast:0,
+  first:true,level:0,refresh:60,cap:0,iv:[],queries:[],gpu:0,fps:0,slowN:0,fastN:0,last:0,tLast:0,
   LEVELS:[[1,1,1,1],[.85,.85,.875,.85],[.72,.72,.75,.7],[.62,.6,.625,.6],[.52,.5,.5,.5],[.44,.45,.44,.45]],
   auto(){return!P.qual},
   lvl(){return this.auto()?this.level:[0,0,1,3,4,5][P.qual|0]},
@@ -30,8 +30,12 @@ const Gov={
     const now=performance.now(),hz=this.targetHz()||this.refresh,budget=1000/hz*.82,haveGpu=!!timerExt&&this.gpu>0;
     const slow=haveGpu?this.gpu>budget&&fps<hz*.97:fps<hz*.88,fast=haveGpu?this.gpu<budget*.42&&fps>hz*.95:false;
     this.slowN=slow?this.slowN+1:0;this.fastN=fast?this.fastN+1:0;
-    if(this.slowN>=3&&now-this.last>2000){this.slowN=0;this.last=now;
-      if(this.level<this.LEVELS.length-1){this.level++;this.apply()}
+    if(this.slowN>=(this.first?1:3)&&now-this.last>(this.first?400:2000)){this.slowN=0;this.last=now;
+      // With a GPU timing, jump straight to the level whose pixel count fits the budget (cost ~ resolution²).
+      let L=this.level+1;
+      if(haveGpu){const s0=this.LEVELS[this.level][0];while(L<this.LEVELS.length-1&&this.gpu*(this.LEVELS[L][0]/s0)**2>budget*.8)L++}
+      this.first=false;this.gpu=0;
+      if(this.level<this.LEVELS.length-1){this.level=Math.min(L,this.LEVELS.length-1);this.apply()}
       else if(P.hz===6&&!this.cap&&this.refresh>=100){this.cap=Math.round(this.refresh/2)}}
     else if(this.fastN>=10&&now-this.last>5000){this.fastN=0;this.last=now;
       if(this.cap){this.cap=0}else if(this.level>0){this.level--;this.apply()}}

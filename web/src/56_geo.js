@@ -25,7 +25,9 @@ const Geo={
   update(dt,E){
     const i=E.geo|0;if(!i){this.cur=0;return false}
     const p=GEO[i],animate=p&&p.anim;this.drawT+=dt*(1+Music.energy*1.5)*(animate?1:0);
-    if(i!==this.cur||E.gw!==this.curW||animate&&(this.anim+=dt)>=.05){this.anim=0;this.cur=i;this.curW=E.gw;this.paint(this.x,i,this.drawT,GEO_SIZE,E.gw);this.upload()}
+    const dropKey=p&&p.onDrop?Music.dropN:0;
+    if(i!==this.cur||E.gw!==this.curW||dropKey!==this.curDrop||animate&&(this.anim+=dt)>=1/12){this.anim=0;this.cur=i;this.curW=E.gw;this.curDrop=dropKey;
+      const sz=animate?512:GEO_SIZE;if(this.cv.width!==sz)this.cv.width=this.cv.height=sz;this.paint(this.x,i,p&&p.onDrop?dropKey*15:this.drawT,sz,E.gw);this.upload()}
     return true;
   },
   /* Small preview for the picker (data URL, drawn once). */
@@ -36,33 +38,49 @@ const Geo={
   ring:9,ringW:.08,u:null,line:0,
   /* Outline drawn by compose.frag: three layer colours from the palette, brighter on the beat. */
   composeUniforms(){const u=this.u;if(!u||!this.line)return{uGeoLine:0};return{uGeo:this.tex,uGeoAsp:u.uAspect,uGeoT:[u.uScale,u.uRotA,u.uRotB,this.tile],uGeoLine:this.line,uGeoA:this.cols[0],uGeoB:this.cols[1],uGeoC:this.cols[2],uGeoNest:(GEO[Director.E.geo|0]||{}).fig?0:clamp((Director.cx||0)*1.4-.2,0,1)}},
+  /* Particle-update uniforms: where the pattern is, so Swarm and Magnet particles can find its lines. */
+  particleUniforms(E){const u=this.u,B=GEO_BEH[E.beh|0]||GEO_BEH[0],M=Music;
+    if(!u||!this.on)return{uBeh:0};
+    const scatter=B.parts?(M.beat*E.gpulse*1.4+M.drop*3.5+M.kick*.4)*(B.scatter||1):0;
+    const r=this.resetN!==M.dropN;this.resetN=M.dropN;
+    return{uGeo:this.tex,uGeoAsp:u.uAspect,uGeoT:[u.uScale,u.uRotA,u.uRotB,this.tile],uBeh:E.beh|0,uPull:B.pull*(1+M.energy*.6),uScatter:scatter,uReset:r&&M.dropN?1:0}},
   inject(dt,E){
     if(App.paused)return;
-    const on=this.update(dt,E),M=Music;
+    const on=this.on=this.update(dt,E),M=Music,B=GEO_BEH[E.beh|0]||GEO_BEH[0];
     if(M.onBeat&&P.shock>0)this.ring=0;
     this.ring+=dt*(1.2+M.energy*2);
     const shock=P.shock>0&&this.ring<2.2?P.shock*40*(M.downbeat?1.6:1)*Math.exp(-this.ring*1.4):0;
     if(!on)this.line=0;
     if(!on&&!shock)return;
     const a=Engine.sim[0]/Engine.sim[1],asp=[(a>=1?a:1)*Engine.world,(a>=1?1:1/a)*Engine.world];
-    const pat=GEO[E.geo|0]||{};this.sway=(this.sway||0)+dt*(.35+M.energy*.8);
+    const pat=GEO[E.geo|0]||{};this.sway=(this.sway||0)+dt*(.3+M.energy*.5);
     if(pat.fig){this.rotA=this.rotB=Math.sin(this.sway)*.07*Math.sign(E.grot||1)+.04*M.beat*E.gpulse*Math.sin(this.sway*3.1)}   // figures stay whole and upright, swaying
-    else{this.rotA=(this.rotA||0)+dt*E.grot*(1+M.energy*1.5);this.rotB=pat.whole||pat.tile?this.rotA:(this.rotB||0)+dt*E.gcnt*(1+M.energy*1.5)}
+    else{this.rotA=(this.rotA||0)+dt*E.grot*(1+M.energy);this.rotB=pat.whole||pat.tile?this.rotA:(this.rotB||0)+dt*E.gcnt*(1+M.energy)}
     this.tile=pat.tile?1:0;
-    const breathe=1+E.gpulse*(.06*M.beat+.03*Math.cos(TAU*M.phase)*Math.min(1,M.conf*1.3)+.12*M.drop);
+    const breathe=1+E.gpulse*(.05*M.beat+.025*Math.cos(TAU*M.phase)*Math.min(1,M.conf*1.3)+.1*M.drop);
     const u={uGeo:this.tex,uTile:this.tile,uAspect:asp,uScale:E.gsz*.5*breathe,uRotA:this.rotA,uRotB:this.rotB,uOn:on?1:0,
-      uTile:0,uRing:this.ring*.55,uRingW:.05+this.ring*.04,uShock:shock,uTime:clock,uCm:E.gcm|0,
+      uRing:this.ring*.55,uRingW:.05+this.ring*.04,uShock:shock,uTime:clock,uCm:E.gcm|0,uBeh:E.beh|0,
       uHue:hueBase+(E.h-hueBase),uHueRange:E.hr,uSat:E.s,...paletteUniforms()};
     this.u=u;
-    if(on){const c=[0,.33,.66].map(k=>paletteRGB(E.h+E.hr*(k+clock*.01)).map(z=>z));this.cols=c;
-      this.line=E.gline*(.55+.7*M.beat*E.gpulse+.8*M.drop)*(1/(1+.0*E.gsz))}
-    if(on){const amt=E.gamt*dt*1.2*(.6+.9*M.beat*E.gpulse+.6*M.drop);
-      pass('geo.frag',{...u,uSrc:Engine.dye.r,uMode:0,uAmt:amt,uPush:0,uSwirl:0},Engine.dye.w);Engine.dye.swap()}
-    const push=on?E.gpush*(45*M.beat*E.gpulse+20*M.kick+90*M.drop):0,swirl=on?E.gswirl*35*(1+M.energy*1.5):0;
-    if(push||swirl||shock){pass('geo.frag',{...u,uSrc:Engine.vel.r,uMode:1,uAmt:0,uPush:push,uSwirl:swirl},Engine.vel.w);Engine.vel.swap()}
+    if(on){this.cols=[0,.33,.66].map(k=>paletteRGB(E.h+E.hr*(k+clock*.01)));
+      this.line=E.gline*B.line*(.6+.6*M.beat*E.gpulse+.7*M.drop)}
+    if(on&&B.ink){const amt=E.gamt*B.ink*dt*(.6+.9*M.beat*E.gpulse+.6*M.drop);
+      pass('geo.frag',{...u,uSrc:Engine.dye.r,uMode:0,uAmt:amt,uHalo:B.halo||0,uPush:0,uSwirl:0},Engine.dye.w);Engine.dye.swap()}
+    const push=on?E.gpush*(30*M.beat*E.gpulse+12*M.kick+70*M.drop)*(B.push??1):0,swirl=on?E.gswirl*25*(1+M.energy):0;
+    const vort=on&&B.vort?B.vort*dt*60*(1+M.energy*1.2+M.drop*1.5):0,cur=on&&B.current?B.current*(1+M.energy*.8+M.drop):0;
+    if(push||swirl||shock||vort||cur){pass('geo.frag',{...u,uSrc:Engine.vel.r,uMode:1,uAmt:0,uPush:push,uSwirl:swirl,uVort:vort,uCurrent:cur},Engine.vel.w);Engine.vel.swap()}
   }
 };
-
+/* Behaviours: how fluid and particles relate to the pattern. line = outline strength, ink = fluid ink from the
+   pattern, parts = particles drive the picture (style forced), pull = particle speed towards / along the lines. */
+const GEO_BEH=[
+  {n:'Glow',line:1,ink:.35},
+  {n:'Swarm',line:.08,ink:.05,parts:1,pull:.7,push:.5,style:{fx:3,pn:1,psz:1.6,ptl:.6,pbr:2.2,plf:7,pspd:.6}},
+  {n:'Ink',line:.35,ink:1.05,push:.6},
+  {n:'Vortex',line:.3,ink:.3,vort:9,push:.3,style:{fx:4,pn:.55,psz:1.1,ptl:.85,pbr:.9,plf:4,pspd:1}},
+  {n:'Obstacle',line:.5,ink:1.3,halo:1,current:28,push:.3,style:{fx:4,pn:.45,psz:1,ptl:.88,pbr:.8,plf:5,pspd:1}},
+  {n:'Magnet',line:.1,ink:.08,parts:1,pull:.6,scatter:.6,style:{fx:3,pn:1,psz:1.4,ptl:.8,pbr:2,plf:8,pspd:.5}},
+];
 /* Drawing kit in unit coordinates. Every stroke is drawn twice: a wide faint halo and a crisp core. */
 function makeDrawer(x,size,lw){
   const px=1/(size*.47),W=3.6*lw*px*(size/1024)**.35;
@@ -100,7 +118,8 @@ function makeDrawer(x,size,lw){
         t=X*Math.cos(ay)+Z*Math.sin(ay);Z=-X*Math.sin(ay)+Z*Math.cos(ay);X=t;
         t=X*Math.cos(az)-Y*Math.sin(az);Y=X*Math.sin(az)+Y*Math.cos(az);X=t;
         const k=scale*2.8/(2.8-Z);return[X*k,Y*k,Z]});
-      const a0=alpha;for(const[i,j]of Ed){alpha=depthFade?a0*(.45+.55*clamp((P[i][2]+P[j][2])*.25+.5,0,1)):a0;d.seg(P[i][0],P[i][1],P[j][0],P[j][1])}alpha=a0;return P},
+      if(!depthFade){x.beginPath();for(const[i,j]of Ed){x.moveTo(P[i][0],P[i][1]);x.lineTo(P[j][0],P[j][1])}stroke();return P}
+      const a0=alpha;for(const[i,j]of Ed){alpha=a0*(.45+.55*clamp((P[i][2]+P[j][2])*.25+.5,0,1));d.seg(P[i][0],P[i][1],P[j][0],P[j][1])}alpha=a0;return P},
   };
   return d;
 }
@@ -129,8 +148,8 @@ let LORENZ=null;function lorenz(){if(LORENZ)return LORENZ;let x=.1,y=0,z=0;const
 /* Hex-lattice centres within radius R (lattice step s). */
 function hexCentres(s,R){const out=[];for(let i=-12;i<=12;i++)for(let j=-12;j<=12;j++){const x=s*(i+j/2),y=s*j*Math.sqrt(3)/2;if(Math.hypot(x,y)<=R+1e-6)out.push([x,y])}return out}
 const CHAKRAS=[
-  ['Muladhara',4,'लं','square'],['Svadhisthana',6,'वं','moon'],['Manipura',10,'रं','down'],['Anahata',12,'यं','hex'],
-  ['Vishuddha',16,'हं','circle'],['Ajna',2,'ॐ','ajna'],['Sahasrara',1000,'','crown']];
+  ['Muladhara',4,'लं','square',0],['Svadhisthana',6,'वं','moon',.065],['Manipura',10,'रं','down',.13],['Anahata',12,'यं','hex',.33],
+  ['Vishuddha',16,'हं','circle',.56],['Ajna',2,'ॐ','ajna',.68],['Sahasrara',1000,'','crown',.79]];
 function chakra(d,k,t){
   const[,n,bija,shape]=CHAKRAS[k];
   d.ly(2).circ(0,0,.93).circ(0,0,.97);
@@ -234,7 +253,7 @@ const GEO=[
   {n:'Mandala',f:'Sacred',draw(d){d.ly(2).circ(0,0,.12).circ(0,0,.93);d.ly(0).lotus(12,.12,.26,.06);d.ly(1);for(let i=0;i<24;i++){const a=TAU*i/24;d.dot(Math.cos(a)*.44,Math.sin(a)*.44,.022)}d.circ(0,0,.48);d.ly(0).lotus(24,.5,.24,.04);d.ly(1).curve(a=>[Math.cos(a)*(.8+.04*Math.cos(a*36)),Math.sin(a)*(.8+.04*Math.cos(a*36))],0,TAU,720);d.ly(2).lotus(48,.84,.08,.012)}},
   {n:'Labyrinth',f:'Sacred',draw(d){for(let k=0;k<11;k++){const r=.12+k*.072,g=.12/(1+k*.3),s=k%2?Math.PI/2:-Math.PI/2;d.ly(k%3===2?2:k%2).arc(0,0,r,s+g,s+TAU-g)}d.ly(2);for(let k=0;k<10;k+=2)d.seg(0,.12+k*.072,0,.12+(k+1)*.072)}},
   // ---------- Chakra ----------
-  ...CHAKRAS.map((c,k)=>({n:c[0],fig:c[0]==='Ajna'?1:0,f:'Chakra',draw(d,t){chakra(d,k,t)}})),
+  ...CHAKRAS.map((c,k)=>({n:c[0],hue:c[4],fig:c[0]==='Ajna'?1:0,f:'Chakra',draw(d,t){chakra(d,k,t)}})),
   {n:'Seven Chakras',fig:1,f:'Chakra',draw(d){const ys=[-.78,-.52,-.26,0,.26,.52,.8],ns=[4,6,10,12,16,2,24];
     d.ly(2,.7).seg(0,-.92,0,.92);d.ly(1,.9).curve(t=>[Math.sin(t*Math.PI*3.5)*.16,t*.8],-1.05,1.05,300).curve(t=>[-Math.sin(t*Math.PI*3.5)*.16,t*.8],-1.05,1.05,300);
     ys.forEach((y,i)=>{d.ly(0).circ(0,y,.075);for(let k=0;k<ns[i];k++)d.ly(0,.85,.7).petal(TAU*k/ns[i],.075,.05,.016,0,y)})}},
@@ -264,8 +283,8 @@ const GEO=[
   {n:'Lissajous',f:'Math',anim:1,draw(d,t){d.ly(0,1,1.1).curve(a=>[.88*Math.sin(3*a+t*.3),.88*Math.sin(2*a)],0,TAU,900);d.ly(1).curve(a=>[.7*Math.sin(5*a+t*.21),.7*Math.sin(4*a)],0,TAU,1200);d.ly(2,.8).curve(a=>[.5*Math.sin(7*a),.5*Math.sin(6*a+t*.17)],0,TAU,1400)}},
   {n:'Atom',f:'Math',draw(d){for(let i=0;i<3;i++){const a=TAU*i/6;d.ly(i,1,1.1).curve(s=>{const x=Math.cos(s)*.85,y=Math.sin(s)*.3;return[x*Math.cos(a)-y*Math.sin(a),x*Math.sin(a)+y*Math.cos(a)]},0,TAU,300)}d.ly(2).dot(0,0,.07).circ(0,0,.12)}},
   {n:'DNA Helix',fig:1,f:'Math',anim:1,draw(d,t){d.ly(0,1,1.2).curve(s=>[Math.sin(s*7+t)*.3,s],-.95,.95,300);d.ly(1,1,1.2).curve(s=>[Math.sin(s*7+t+Math.PI)*.3,s],-.95,.95,300);for(let i=0;i<24;i++){const s=-.92+i*.08;d.ly(2,.7).seg(Math.sin(s*7+t)*.3,s,Math.sin(s*7+t+Math.PI)*.3,s)}}},
-  {n:'Chladni',tile:1,f:'Math',anim:1,draw(d,t){const k=Math.floor(t*.07)%6,M=[[1,4],[2,5],[3,7],[1,6],[4,7],[3,8]][k],m2=[[2,3],[3,6],[2,7],[5,6],[1,8],[4,9]][k];d.field((u,v)=>{const a=Math.abs(chladni(M[0],M[1],u,v)),b=Math.abs(chladni(m2[0],m2[1],u,v));return[Math.exp(-a*a*90),Math.exp(-b*b*90)*.8,0]},320)}},
-  {n:'Interference',tile:1,f:'Math',anim:1,draw(d,t){const S=[[-.45,-.3],[.45,-.3],[0,.5]];d.field((u,v)=>{let s=0;for(const[a,b]of S)s+=Math.cos(Math.hypot(u-a,v-b)*48-t*.6);const q=Math.abs(s)/3;return[Math.pow(q,4),Math.pow(Math.max(0,s)/3,6)*.8,0]},320)}},
+  {n:'Chladni',tile:1,f:'Math',onDrop:1,draw(d,t){const k=Math.floor(t*.07)%6,M=[[1,4],[2,5],[3,7],[1,6],[4,7],[3,8]][k],m2=[[2,3],[3,6],[2,7],[5,6],[1,8],[4,9]][k];d.field((u,v)=>{const a=Math.abs(chladni(M[0],M[1],u,v)),b=Math.abs(chladni(m2[0],m2[1],u,v));return[Math.exp(-a*a*90),Math.exp(-b*b*90)*.8,0]},220)}},
+  {n:'Interference',tile:1,f:'Math',draw(d,t){const S=[[-.45,-.3],[.45,-.3],[0,.5]];d.field((u,v)=>{let s=0;for(const[a,b]of S)s+=Math.cos(Math.hypot(u-a,v-b)*48-t*.6);const q=Math.abs(s)/3;return[Math.pow(q,4),Math.pow(Math.max(0,s)/3,6)*.8,0]},260)}},
   // ---------- Fractal ----------
   {n:'Koch Snowflake',f:'Fractal',draw(d){const s=lsys('F--F--F',{F:'F+F--F+F'},4);d.ly(0,1,.9);turtle(d,s,Math.PI/3,.88);d.ly(1,.9);turtle(d,lsys('F--F--F',{F:'F+F--F+F'},2),Math.PI/3,.42);d.ly(2).circ(0,0,.93)}},
   {n:'Sierpinski',f:'Fractal',draw(d){const go=(a,b,c,n)=>{if(!n){d.ly((a[0]*7+a[1]*3>0)?0:1,.9,.8).poly([a,b,c]);return}const m=(p,q)=>[(p[0]+q[0])/2,(p[1]+q[1])/2];go(a,m(a,b),m(a,c),n-1);go(m(a,b),b,m(b,c),n-1);go(m(a,c),m(b,c),c,n-1)};const P=d.ngonPts(3,.9,0,0,-.1);go(P[0],P[1],P[2],6);d.ly(2,.6).ngon(3,.9,Math.PI,0,-.1)}},

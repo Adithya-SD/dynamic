@@ -108,7 +108,7 @@ const Engine={
 
   particles(dt,P,emit,time,palette,paused){
     if(!P.fx)return;
-    if(!paused){pass('particles_update.frag',{uState:this.parts.r,uVel:this.vel.r,uRefTx:this.refTx(),uEmit:emit,uDt:dt,uSpeed:P.pspd,uLife:P.plf,uTime:time,uWrap:this.wrap?1:0},this.parts.w);this.parts.swap()}
+    if(!paused){pass('particles_update.frag',{uState:this.parts.r,uVel:this.vel.r,uRefTx:this.refTx(),uEmit:emit,uDt:dt,uSpeed:P.pspd,uLife:P.plf,uTime:time,uWrap:this.wrap?1:0,...Geo.particleUniforms(P)},this.parts.w);this.parts.swap()}
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     pass('fade.frag',{uAlpha:1-Math.pow(P.ptl,dt*60)},this.ptx);
     gl.blendFunc(gl.ONE,gl.ONE);

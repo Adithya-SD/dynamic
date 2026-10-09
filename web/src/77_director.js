@@ -14,7 +14,10 @@ const Director={
     this.hue+=(this.hueTo-this.hue)*(1-Math.exp(-dt/.35));
     E.h=P.h+this.hue;
     if(P.geo!==this.lastGeo){this.lastGeo=P.geo;this.geoStep=0}
-    if(P.geo>0&&this.geoStep){const fam=GEO.map((g,i)=>i).filter(i=>i&&GEO[i].f===GEO[P.geo].f),k=fam.indexOf(P.geo|0);E.geo=fam[(k+this.geoStep)%fam.length]}
+    if(P.geo>0&&this.geoStep){const fam=GEO.map((g,i)=>i).filter(i=>i&&GEO[i].f===GEO[P.geo].f&&(GEO[i].hue!=null)===(GEO[P.geo].hue!=null)),k=fam.indexOf(P.geo|0);E.geo=fam[(k+this.geoStep)%fam.length]}
+    const G=GEO[E.geo|0];if(G&&G.hue!=null&&P.pal===0)E.h=G.hue+this.hue*.15;   // chakras keep their own colour
+    // The behaviour owns the particle look: a swarm needs many small, long-lived dots; vortex and obstacle need streams.
+    const B=E.geo>0&&GEO_BEH[E.beh|0];if(B&&B.style){Object.assign(E,B.style);E.pn=Math.min(1,B.style.pn*(.5+P.pn/.7));E.pbr=B.style.pbr*P.pbr}
     if(d<.001){musicFlow(E,0);return E}
     const sec=M.section,ten=sec.tension,inten=sec.intensity,drop=M.drop,pulse=M.pulse*Math.min(1,M.conf*1.3);
     if(M.dropN!==this.dropSeen){this.dropSeen=M.dropN;this.hueTo+=.33*d;this.spinDir=-this.spinDir;this.spinKick=2.2*d*this.spinDir;this.zoomKick=1;this.seg++;if(P.gseq===1)this.geoStep++}
@@ -51,5 +54,5 @@ const Director={
 /* Flow speed rides the music: louder and denser passages move faster, kicks shove, drops surge. */
 function musicFlow(E,d){
   const M=Music,live=performance.now()-M.last<250;
-  musicSpeed=live?clamp(1+M.energy*1.1+M.kick*.5*(.5+d)+M.drop*1.2*d+M.section.intensity*.4*d,1,3.2):1;
+  musicSpeed=live?clamp(1+M.energy*.55+M.kick*.25*(.5+d)+M.drop*.6*d+M.section.intensity*.2*d,1,1.8):1;
 }

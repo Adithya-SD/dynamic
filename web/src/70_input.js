@@ -152,7 +152,8 @@ const Music={
     const c=Math.min(1,this.conf*1.3);
     this.beat=Math.max(c*this.pulse,(1-c*.7)*this.onset,this.drop);
     // Every confident beat throws a symmetric ring of bursts across the whole screen; downbeats and drops throw wider ones.
-    if(this.onBeat&&P.bpu&&!App.paused&&P.abeat>0){
+    const carried=P.geo>0&&(GEO_BEH[P.beh|0]||{}).parts;   // particles already carry the beat
+    if(this.onBeat&&P.bpu&&!App.paused&&P.abeat>0&&!carried){
       const k=this.downbeat?8:6,R0=S*(this.downbeat?.3:.18)*(1+this.bass),f=P.frc*.02*P.abeat*(.6+this.bass)*(this.downbeat?1.4:1),rot=this.beats*GOLDEN_ANGLE;
       for(let i=0;i<k;i++){const a=rot+i*TAU/k,x=W/2+Math.cos(a)*R0,y=H/2-Math.sin(a)*R0;Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(i*.7+this.beats*.3,200,x/W,1-y/H,i).map(z=>z*.16*this.pulse),r*.35)}
     }
