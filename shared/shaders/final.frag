@@ -61,7 +61,8 @@ void main(){
     vec3 s=vec3(0.);
     // Refraction bends the lookup at the bezel and splits the colours a little; the middle sees the frosted picture.
     if(uBlur>.5){for(int c=0;c<3;c++)s[c]=frosted(fc-m+g*f*uRefr*B*(1.+(float(c)-1.)*uDisp))[c];
-      s=mix(vec3(dot(s,vec3(.299,.587,.114))),s,1.22)*.86+.05;}   // vibrancy and a lift, as the real material has
+      s=mix(vec3(dot(s,vec3(.299,.587,.114))),s,1.22)*.86+.05;
+      s*=1.-.5*smoothstep(.25,.7,dot(s,vec3(.299,.587,.114)));}   // a bright backdrop is dimmed under the glass so the text on it stays readable   // vibrancy and a lift, as the real material has
     else{for(int c=0;c<3;c++)s[c]=img(fc-m+g*f*uRefr*B*(1.+(float(c)-1.)*uDisp))[c];s=s*.72+.04;}
     float rim=exp(-max(-best,0.)/(1.6*uDp)),ang=dot(g,vec2(-.6,-.8)),sp=pow(max(ang,0.),1.5)+.55*pow(max(-ang,0.),2.);
     s+=rim*(.18+.85*sp)+(1.-dep)*(1.-dep)*.12*(.5+sp);

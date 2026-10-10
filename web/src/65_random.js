@@ -34,7 +34,9 @@ const Rand={
   },
   apply(seed,{record=true}={}){
     this.seed=seed;if(record){this.hist.length=this.pos+1;this.hist.push(seed);this.pos=this.hist.length-1}
-    Quick.reset();const v=this.look(seed);B={...P,...v};morph={from:{...P},to:v,t:0};hueBase=v.h;Director.reset();persist();
+    Quick.reset();const v=this.look(seed);B={...P,...v};
+    if(changesStructure(v)&&Trans.begin(0)){Object.assign(P,v);morph=null}else morph={from:{...P},to:v,t:0};
+    hueBase=v.h;Director.reset();persist();
     $('#pn').textContent='Random #'+seed;if(UI.built)UI.sync();
     const sy=$('#sy');if(sy)sy.textContent=String(seed%1000);
   },

@@ -7,12 +7,12 @@ uniform float uExposure,uHue,uParityHue,uChroma,uPartOn,uFloor,uVib,uTone;
 // The ball (uOrb in space.glsl): light direction in view space, rim colour, how much depth cueing to apply.
 uniform vec3 uOrbL,uOrbRim;uniform float uOrbDepth;
 // Geometry outline: the pattern itself, crisp, sampled at the same folded sheet position as the ink.
-uniform sampler2D uGeo;uniform vec2 uGeoAsp;uniform vec4 uGeoT;uniform float uGeoLine;uniform vec3 uGeoA,uGeoB,uGeoC;uniform float uGeoNest;
+uniform sampler2D uGeo;uniform vec2 uGeoAsp,uGeoCtr;uniform vec4 uGeoT;uniform float uGeoLine;uniform vec3 uGeoA,uGeoB,uGeoC;uniform float uGeoNest;
 // Ink, particles and pattern at one sheet position, tinted by how many mirrors the pixel went through.
 vec3 sceneAt(vec2 uv,float parity){
   vec3 z=texture(uDye,uv).rgb;
   if(uPartOn>.5)z+=texture(uPart,uv).rgb;
-  if(uGeoLine>0.){vec2 g=(uv-.5)*uGeoAsp/uGeoT.x;
+  if(uGeoLine>0.){vec2 g=(uv-uGeoCtr)*uGeoAsp/uGeoT.x;
     vec2 a=rot2(g,uGeoT.y),b=rot2(g,uGeoT.z);
     {vec3 L=vec3(texture(uGeo,a*.5+.5).r,texture(uGeo,b*.5+.5).g,texture(uGeo,g*.5+.5).b);
     if(uGeoT.w<.5)L*=vec3(step(max(abs(a.x),abs(a.y)),1.),step(max(abs(b.x),abs(b.y)),1.),step(max(abs(g.x),abs(g.y)),1.));

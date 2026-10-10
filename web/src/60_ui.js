@@ -288,13 +288,15 @@ UI={
     if(this.tab>=0)this.scroll[this.tab]=$('#bd').scrollTop;
     this.tab=t;if(t>0)this.lastTab=t;this.open=true;sh.classList.add('o');
     if(!this.searching)this.panels.forEach((p,i)=>p.hidden=i!==t);
-    this.tabBtns.forEach((b,i)=>{b.classList.toggle('on',i===t);b.setAttribute('aria-selected',i===t)});this.tabBtns[t].scrollIntoView({inline:'nearest',block:'nearest'});
+    this.tabBtns.forEach((b,i)=>{b.classList.toggle('on',i===t);b.setAttribute('aria-selected',i===t)});this.revealTab();
     $('#bd').scrollTop=this.scroll[t]|0;$('#kp').classList.toggle('on',t===0);$('#kt').classList.toggle('on',t>0);
     this.describeTab();this.layoutDirty=true;this.persistUi();
   },
+  /* Scroll the tab strip (not the page) so the active tab sits inside it. */
+  revealTab(){const tb=$('#tabs'),b=this.tabBtns[this.tab];if(!b)return;const x=b.offsetLeft-(tb.clientWidth-b.offsetWidth)/2;tb.scrollTo({left:Math.max(0,x),behavior:'smooth'})},
   shut(){if(this.tab>=0)this.scroll[this.tab]=$('#bd').scrollTop;$('#sh').classList.remove('o');this.open=false;this.disarm();$('#kp').classList.remove('on');$('#kt').classList.remove('on');this.layoutDirty=true;this.persistUi()},
   buildDock(){
-    const dock=$('#dock'),I={p:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',t:'M4 8h9M17 8h3M4 16h3M11 16h9M15 5v6M9 13v6',y:SCHEMA.tabs.find(t=>t[0]==='space')[2],u:'M8 5L3 10l5 5M3 10h10a7 7 0 0 1 7 7',z:'M8 5v14M16 5v14',c:'M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5',f:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'};
+    const dock=$('#dock'),I={p:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',t:'M4 8h9M17 8h3M4 16h3M11 16h9M15 5v6M9 13v6',y:SCHEMA.tabs.find(t=>t[0]==='space')[2],u:'M8 5L3 10l5 5M3 10h10a7 7 0 0 1 7 7',v:'M12 12c-1.7-2.3-3.3-3.8-5-3.8a3.8 3.8 0 1 0 0 7.6c1.7 0 3.3-1.5 5-3.8z',z:'M8 5v14M16 5v14',c:'M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5',f:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'};
     const add=(id,label,fn)=>{const b=el('button','k',svgIcon(I[id])+(id==='y'?'<i id="sy"></i>':''));b.id='k'+id;b.setAttribute('aria-label',label);b.onclick=()=>fn(b);dock.append(b);return b};
     add('p','Presets',()=>this.show(0));
     add('t','Settings',()=>this.show(this.lastTab));
@@ -302,6 +304,11 @@ UI={
     const yb=add('y','Random look (tap: new, hold: back)',()=>{});yb.onclick=null;yb.title='Random look: tap for a new one, hold to go back';
     let yt=0,yl=false;yb.addEventListener('pointerdown',()=>{yl=false;clearTimeout(yt);yt=setTimeout(()=>{yl=true;Rand.back()},450)});
     yb.addEventListener('pointerup',()=>{clearTimeout(yt);if(!yl)Rand.next()});yb.addEventListener('pointerleave',()=>clearTimeout(yt));
+    // Canvas: window -> infinite (endless, never loops) -> wrap (finite world, edges wrap) -> window.
+    const INF='M12 12c-1.7-2.3-3.3-3.8-5-3.8a3.8 3.8 0 1 0 0 7.6c1.7 0 3.3-1.5 5-3.8zm0 0c1.7 2.3 3.3 3.8 5 3.8a3.8 3.8 0 1 0 0-7.6c-1.7 0-3.3 1.5-5 3.8z',WRAP='M4 9V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3M8 6.5L5.5 9 8 11.5M16 17.5l2.5-2.5-2.5-2.5';
+    const NOTE=['Window · the picture fills the screen','Infinite · tilt (or move the mouse) to fly over an endless canvas','Wrap · a finite world whose edges wrap round; tilt to look around inside it'];
+    const cb=add('v','Canvas: infinite / wrap / window',()=>{const n=((P.cvs|0)+1)%3;this.change('cvs',n);notice(NOTE[n],3000);haptic(10)});
+    this.upd.push(()=>{const m=P.cvs|0;cb.classList.toggle('on',m>0);cb.querySelector('path').setAttribute('d',m===2?WRAP:INF);cb.title=NOTE[m]});
     add('u','Undo',()=>{if(!Engine.restore())notice('Nothing to undo.',1500)});
     add('z','Pause',b=>{App.paused=!App.paused;b.classList.toggle('on',App.paused);b.querySelector('path').setAttribute('d',App.paused?'M8 5l11 7-11 7z':I.z)});
     add('c','Clear',()=>Engine.clear());
@@ -325,7 +332,9 @@ UI={
       o*=1-ease(e._d||0);if(o<.02||n>7)continue;const b=e.getBoundingClientRect();if(b.bottom<0||b.top>VH()||!b.width)continue;
       R.set([b.left*dpr,b.top*dpr,b.width*dpr,b.height*dpr],n*4);Q[n*2]=Math.min((+e.dataset.r||b.height/2)*dpr,b.width*dpr/2,b.height*dpr/2);Q[n*2+1]=o;n++;
     }
-    if(this.open&&this.sel&&n<8){const s=this.sel;R.set([s[0]*dpr,s[1]*dpr,s[2]*dpr,s[3]*dpr],n*4);Q[n*2]=Math.min(s[3]/2*dpr,s[2]/2*dpr);Q[n*2+1]=+getComputedStyle($('#sh')).opacity*(1-ease($('#sh')._d||0));n++}
+    // The capsule under the active tab: only where the tab strip really shows it (a tab scrolled out of the strip leaves no glass behind)
+    if(this.open&&this.sel&&n<8){const s=this.sel,c=$('#tabs').getBoundingClientRect(),x0=Math.max(s[0],c.left+4),x1=Math.min(s[0]+s[2],c.right-4);
+      if(x1-x0>10&&s[1]>=c.top-2&&s[1]<c.bottom){R.set([x0*dpr,s[1]*dpr,(x1-x0)*dpr,s[3]*dpr],n*4);Q[n*2]=Math.min(s[3]/2*dpr,(x1-x0)/2*dpr);Q[n*2+1]=+getComputedStyle($('#sh')).opacity*(1-ease($('#sh')._d||0));n++}}
     return this._g={R,Q,n};
   },
   frame(dt){

@@ -5,7 +5,7 @@
    are redrawn ~20 times a second. Families: Sacred, Chakra, Divine, Solids, Math, Fractal, Psychedelic. */
 const GEO_SIZE=1024;
 const Geo={
-  tex:null,cv:null,x:null,cur:-1,curW:-1,drawT:0,anim:0,thumbs:{},
+  tex:null,cv:null,x:null,cur:-1,curW:-1,drawT:0,anim:0,thumbs:{},ctr:[.5,.5],
   init(){
     this.cv=el('canvas');this.cv.width=this.cv.height=GEO_SIZE;this.x=this.cv.getContext('2d',{willReadFrequently:false});
     this.tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.tex);
@@ -37,15 +37,17 @@ const Geo={
   /* Paint into the ink and push the flow. Called once per frame before the simulation step. */
   ring:9,ringW:.08,u:null,line:0,
   /* Outline drawn by compose.frag: three layer colours from the palette, brighter on the beat. */
-  composeUniforms(){const u=this.u;if(!u||!this.line)return{uGeoLine:0};return{uGeo:this.tex,uGeoAsp:u.uAspect,uGeoT:[u.uScale,u.uRotA,u.uRotB,this.tile],uGeoLine:this.line,uGeoA:this.cols[0],uGeoB:this.cols[1],uGeoC:this.cols[2],uGeoNest:(GEO[Director.E.geo|0]||{}).fig?0:clamp((Director.cx||0)*1.4-.2,0,1)}},
+  composeUniforms(){const u=this.u;if(!u||!this.line)return{uGeoLine:0};return{uGeo:this.tex,uGeoAsp:u.uAspect,uGeoCtr:this.ctr,uGeoT:[u.uScale,u.uRotA,u.uRotB,this.tile],uGeoLine:this.line,uGeoA:this.cols[0],uGeoB:this.cols[1],uGeoC:this.cols[2],uGeoNest:(GEO[Director.E.geo|0]||{}).fig?0:clamp((Director.cx||0)*1.4-.2,0,1)}},
   /* Particle-update uniforms: where the pattern is, so Swarm and Magnet particles can find its lines. */
   particleUniforms(E){const u=this.u,B=GEO_BEH[E.beh|0]||GEO_BEH[0],M=Music;
     if(!u||!this.on)return{uBeh:0};
     const scatter=B.parts?(M.beat*E.gpulse*1.4+M.drop*3.5+M.kick*.4)*(B.scatter||1):0;
     const r=this.resetN!==M.dropN;this.resetN=M.dropN;
-    return{uGeo:this.tex,uGeoAsp:u.uAspect,uGeoT:[u.uScale,u.uRotA,u.uRotB,this.tile],uBeh:E.beh|0,uPull:B.pull*(1+M.energy*.6),uScatter:scatter,uReset:r&&M.dropN?1:0}},
+    return{uGeo:this.tex,uGeoAsp:u.uAspect,uGeoCtr:this.ctr,uGeoT:[u.uScale,u.uRotA,u.uRotB,this.tile],uBeh:E.beh|0,uPull:B.pull*(1+M.energy*.6),uScatter:scatter,uReset:r&&M.dropN?1:0}},
   inject(dt,E){
     if(App.paused)return;
+    // On an endless canvas the pattern stays where you look; the fluid is what scrolls.
+    {const c=Space.mode===1&&Space.u.uSpace<2?Space.u.uCam:[0,0];this.ctr=[.5+c[0],.5+c[1]]}
     const on=this.on=this.update(dt,E),M=Music,B=GEO_BEH[E.beh|0]||GEO_BEH[0];
     if(M.onBeat&&P.shock>0)this.ring=0;
     this.ring+=dt*(1.2+M.energy*2);
@@ -58,7 +60,7 @@ const Geo={
     else{this.rotA=(this.rotA||0)+dt*E.grot*(1+M.energy);this.rotB=pat.whole||pat.tile?this.rotA:(this.rotB||0)+dt*E.gcnt*(1+M.energy)}
     this.tile=pat.tile?1:0;
     const breathe=1+E.gpulse*(.05*M.beat+.025*Math.cos(TAU*M.phase)*Math.min(1,M.conf*1.3)+.1*M.drop);
-    const u={uGeo:this.tex,uTile:this.tile,uAspect:asp,uScale:E.gsz*.5*breathe,uRotA:this.rotA,uRotB:this.rotB,uOn:on?1:0,
+    const u={uGeo:this.tex,uTile:this.tile,uAspect:asp,uGeoCtr:this.ctr,uScale:E.gsz*.5*breathe,uRotA:this.rotA,uRotB:this.rotB,uOn:on?1:0,
       uRing:this.ring*.55,uRingW:.05+this.ring*.04,uShock:shock,uTime:clock,uCm:E.gcm|0,uBeh:E.beh|0,
       uHue:hueBase+(E.h-hueBase),uHueRange:E.hr,uSat:E.s,...paletteUniforms()};
     this.u=u;

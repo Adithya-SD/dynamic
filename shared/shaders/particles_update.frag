@@ -6,7 +6,7 @@
 //   others: carried by the fluid only.
 in vec2 v;out vec4 o;
 uniform sampler2D uState,uVel,uGeo;
-uniform vec2 uRefTx,uGeoAsp;
+uniform vec2 uRefTx,uGeoAsp,uGeoCtr;
 uniform vec4 uEmit;   // x, y, active, spread
 uniform vec4 uGeoT;   // scale, rotA, rotB, tile
 uniform float uDt,uSpeed,uLife,uTime,uWrap,uBeh,uPull,uScatter,uReset,uMaxStep;
@@ -21,7 +21,7 @@ void main(){
   vec2 flow=texture(uVel,s.xy).xy*uRefTx*uDt*uSpeed;
   {float fl=length(flow),mx=uMaxStep*uDt;if(fl>mx)flow*=mx/fl;}   // never faster than the eye can follow
   if(uBeh>.5&&(uBeh<1.5||uBeh>4.5)){
-    vec2 g=(s.xy-.5)*uGeoAsp/uGeoT.x,toUv=uGeoT.x/uGeoAsp;
+    vec2 g=(s.xy-uGeoCtr)*uGeoAsp/uGeoT.x,toUv=uGeoT.x/uGeoAsp;
     vec2 gc=grad(g,5.),gm=grad(g,3.5),gf=grad(g,2.);
     float h=hash12(v*733.+s.w*19.);
     vec2 d;
@@ -52,7 +52,7 @@ void main(){
     // Swarm and Magnet: of six random spots, be born at the one most on the pattern, so the shape fills in at once.
     if(uBeh>.5&&(uBeh<1.5||uBeh>4.5)){float best=-1.;vec2 bp=p;
       for(int k=0;k<6;k++){vec2 c=vec2(hash12(v*(31.+float(k)*7.)+t*(13.+float(k))),hash12(v*(57.+float(k)*5.)+t*(29.+float(k))));
-        float m=mask((c-.5)*uGeoAsp/uGeoT.x,2.)+hash12(c*91.)*.15;if(m>best){best=m;bp=c;}}
+        float m=mask((c-uGeoCtr)*uGeoAsp/uGeoT.x,2.)+hash12(c*91.)*.15;if(m>best){best=m;bp=c;}}
       if(hash12(v*211.+t)<.85)p=bp;}
     s=vec4(clamp(p,0.,1.),1.,hash12(v*571.+t*17.));
   }

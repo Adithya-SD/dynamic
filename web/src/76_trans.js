@@ -5,10 +5,14 @@
 const Trans={
   ghost:null,t:1,dur:1.1,kind:0,sig:'',last:0,GEOM:['kal','foldDepth','hp','hq','arms','mir'],KEYS:['space','kal','foldDepth','hp','hq','arms','mir','pal','cm','fx','field','gcm','geo','beh'],
   active(){return this.t<1&&this.ghost},
+  /* A change the app makes itself (preset, random look): keep the last frame and dissolve it away; the watcher below then
+     ignores the structural change this causes. False when there is no frame to keep yet. */
+  begin(kind){if(!Engine.lastFrame||App.paused)return false;this.t=1;this.fire(kind);this.mute=true;return true},
   /* Called every frame with the picture that is about to be drawn. */
   watch(E,dt){
     this.t=Math.min(1,this.t+dt/this.dur);
     const s=this.KEYS.map(k=>E[k]|0).join('.')+(E.orb>0?'b':'');
+    if(this.mute){this.mute=false;this.sig=s;return}
     if(this.sig&&s!==this.sig&&!App.paused&&Engine.lastFrame){
       const was=this.sig.split('.'),now=s.split('.'),geom=this.KEYS.some((k,i)=>this.GEOM.includes(k)&&was[i]!==now[i]);
       const others=this.KEYS.some((k,i)=>!this.GEOM.includes(k)&&was[i]!==now[i]);

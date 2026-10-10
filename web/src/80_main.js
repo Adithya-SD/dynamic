@@ -47,6 +47,7 @@ const App={
     const E=Director.apply(P,dt),beat=Music.beat,energy=Music.energy;
     Trans.watch(E,dt);
     Space.update(E,this.paused?0:dt,Engine.res,Engine.world,P.aspace*(energy*.4+beat*.5),tl,Tilt.rot(P),E.zp);
+    if(Space.pendingShift){Engine.scrollSheet(Space.pendingShift);Space.pendingShift=null}   // endless canvas: re-centre the world on the camera
     PadPlay.frame(dt);
     Input.frame(dt);
     Engine.flushStamps(P.bt);

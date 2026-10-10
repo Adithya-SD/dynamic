@@ -31,9 +31,16 @@ let morph=null;
 function applyPreset(i,{animate=false}={}){
   const list=allPresets();if(!list[i])return;typeof Quick!=='undefined'&&Quick.reset();
   current=i;const v=presetValues(list[i]);B={...P,...v};
-  if(animate){morph={from:{...P},to:v,t:0}}else{Object.assign(P,v);morph=null}
+  if(animate){
+    // Two ways to change, never both at once: when the structure differs (space, mirrors, palette, pattern...) the old picture
+    // dissolves into the new one with the new values already in place; when only values differ they glide.
+    if(changesStructure(v)&&Trans.begin(0)){Object.assign(P,v);morph=null}
+    else morph={from:{...P},to:v,t:0};
+  }else{Object.assign(P,v);morph=null}
   hueBase=v.h;persist();typeof Director!=='undefined'&&Director.reset();UI&&UI.built&&UI.presetChanged();
 }
+/* True when going to `v` changes something that cannot glide (a choice, a switch, a whole number of mirrors). */
+function changesStructure(v){for(const k in v)if(DISCRETE.has(k)&&v[k]!==P[k])return true;return false}
 const DISCRETE=new Set(SCHEMA.params.filter(p=>p.t||p.st>=1).map(p=>p.k));
 function stepMorph(dt){
   if(!morph)return;morph.t=Math.min(1,morph.t+dt/1.6);const e=morph.t*morph.t*(3-2*morph.t);

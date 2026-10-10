@@ -5,7 +5,7 @@
 //   all: beat push outward along the lines, swirl, and a pressure ring sweeping the whole screen on each beat.
 in vec2 v;out vec4 o;
 uniform sampler2D uSrc,uGeo;
-uniform vec2 uAspect;
+uniform vec2 uAspect,uGeoCtr;
 uniform float uTile,uScale,uRotA,uRotB,uAmt,uPush,uSwirl,uRing,uRingW,uShock,uTime,uHue,uHueRange,uSat,uPal,uOn,uBeh,uVort,uCurrent,uHalo;
 uniform int uMode,uCm;
 uniform vec3 uStops[6];
@@ -21,7 +21,7 @@ vec3 layers(vec2 p,float lod){
 float mask(vec2 p,float lod){return dot(layers(p,lod),vec3(1.,1.,.7));}
 vec2 grad(vec2 p,float lod){float e=exp2(lod)*2./1024.;return vec2(mask(p+vec2(e,0.),lod)-mask(p-vec2(e,0.),lod),mask(p+vec2(0.,e),lod)-mask(p-vec2(0.,e),lod))/(2.*e);}
 void main(){
-  vec2 q=(v-.5)*uAspect;            // short-side units, centre 0
+  vec2 q=(v-uGeoCtr)*uAspect;       // short-side units, centre 0
   vec2 p=q/max(uScale,.05);         // pattern units: the drawing spans -1..1
   vec4 s=texture(uSrc,v);
   if(uMode==0){

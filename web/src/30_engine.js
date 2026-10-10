@@ -31,7 +31,7 @@ const Engine={
     if(programIfReady(vs,fs,want)){this.live[key]=want;return want}
     return this.live[key]||(this.live[key]=want);
   },
-  BASE:['ghost','blur','copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
+  BASE:['ghost','blur','shift','pshift','copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
   /* Compile everything the first frame needs, in parallel. Other spaces follow quietly, one at a time. */
   async warm(onProgress){
     const d=this.spaceDefs(Space.u.uSpace),list=this.BASE.filter(([,f])=>f!=='compose.frag').map(x=>[...x,'']);
@@ -69,8 +69,9 @@ const Engine={
       if(force||!resSame){n.scene=T(...s.res,'rgba16f');n.lit=T(...s.res,'rgba16f');n.bloom=[];let bw=s.res[0],bh=s.res[1];for(let i=0;i<5;i++){bw=Math.max(1,bw>>1);bh=Math.max(1,bh>>1);n.bloom.push(T(bw,bh,'rgba16f'))}}
       for(const k in n){const old=this[k];if(Array.isArray(old))old.forEach(kill);else kill(old);this[k]=n[k]}
       if(n.dye){this.undo.forEach(u=>kill(u));this.undo=[]}
+      if(n.ptx){kill(this.ptx2);this.ptx2=null}
       if(n.scene){Trans.free();this.lastFrame=null;kill(this.echo);this.echo=null;if(this.dof){this.dof.forEach(kill);this.dof=null}}
-      this.sim=s.sim;this.ink=s.ink;this.res=s.res;this.world=s.world;
+      Space.inkSize=s.ink;this.sim=s.sim;this.ink=s.ink;this.res=s.res;this.world=s.world;
       cv.width=s.res[0];cv.height=s.res[1];this.error='';return true;
     }catch(e){made.forEach(kill);this.error='GPU allocation failed; kept previous quality. '+e.message;return false}
   },
@@ -170,6 +171,14 @@ const Engine={
     const c=el('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(new ImageData(px,w,h),0,0);return c;
   },
 
+  /* Infinite canvas: slide every field by the camera's offset (uv) so the camera is centred again. */
+  scrollSheet(s){
+    const sh=(src,dst)=>{pass('shift.frag',{uSrc:src.r,uShift:s},dst.w);dst.swap()};
+    sh(this.dye,this.dye);sh(this.vel,this.vel);sh(this.prs,this.prs);
+    if(this.ptx)pass('shift.frag',{uSrc:this.ptx,uShift:s},this.ptx2||(this.ptx2=target(this.ptx.w,this.ptx.h,'rgba16f')));
+    if(this.ptx&&this.ptx2){const t=this.ptx;this.ptx=this.ptx2;this.ptx2=t}
+    pass('pshift.frag',{uSrc:this.parts.r,uShift:s},this.parts.w);this.parts.swap();
+  },
   /* Interface ink: when the interface dissolves, a picture of it becomes a layer that the fluid carries (uiflow.frag).
      Still water leaves it intact; flow pushes it away and smears it. begin(mask) takes the picture, step() advects it. */
   ui:{r:null,w:null,on:false,a:0,decay:.25,age:0,rel:0},

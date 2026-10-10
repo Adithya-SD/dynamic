@@ -4,7 +4,7 @@
 const TAU=Math.PI*2,PHI=(1+Math.sqrt(5))/2;
 const mirror1=x=>1-Math.abs(((x%2)+2)%2-1);
 const Space={
-  spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,orbT:0,cam:[0,0],pshift:[0,0],sph:[0,0],hypM:[0,0],mode:0,orbR:[1,0,0,0,1,0,0,0,1],
+  spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,orbT:0,cam:[0,0],pshift:[0,0],sph:[0,0],hypM:[0,0],mode:0,pendingShift:null,inkSize:[1024,1024],orbR:[1,0,0,0,1,0,0,0,1],
   u:{uLoop:48,uCam:[0,0],uPeriodic:0,uOrb:0,uPulse:0,uOrbM:[1,0,0,0,1,0,0,0,1],uMobBg:[0,0],uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
   hyperbolic(p,q){
     p=Math.round(p);q=Math.round(q);
@@ -31,7 +31,15 @@ const Space={
     const pos=mode===1?[0,0]:tl;   // position-like tilt (Window and Wrap)
     if(mode===1&&dt>0){
       const sp=(P.cspd||1)*.45,vx=tl[0]*sp,vy=tl[1]*sp,sh=Math.min(res[0],res[1]),c=Math.cos(this.spin),s=Math.sin(this.spin),tile=Math.max(P.tile,.05);
-      this.cam[0]=(this.cam[0]+vx*dt*sh/res[0]/world)%1;this.cam[1]=(this.cam[1]+vy*dt*sh/res[1]/world)%1;
+      this.cam[0]+=vx*dt*sh/res[0]/world;this.cam[1]+=vy*dt*sh/res[1]/world;
+      // Plain and kaleidoscope scroll over the sheet. The sheet is only 1.8 screens, so when the camera drifts a tenth of it
+      // off centre the whole simulation slides back (whole ink texels: nothing blurs) and empty canvas arrives on the far
+      // side: the canvas never loops and the edge of the sheet is never in view.
+      if(u.uSpace<2&&(Math.abs(this.cam[0])>.1||Math.abs(this.cam[1])>.1)){
+        const W=this.inkSize,sx=Math.round(this.cam[0]*W[0])/W[0],sy=Math.round(this.cam[1]*W[1])/W[1];
+        this.cam[0]-=sx;this.cam[1]-=sy;const p=this.pendingShift;this.pendingShift=p?[p[0]+sx,p[1]+sy]:[sx,sy];
+      }
+      if(u.uSpace>=2)this.cam=[0,0];
       this.pshift[0]+=(c*vx-s*vy)*dt/tile;this.pshift[1]+=(s*vx+c*vy)*dt/tile;
       this.sph[0]+=vx*dt*.7;this.sph[1]+=vy*dt*.7;
       // hyperbolic: add a small hyperbolic translation to where we stand (Möbius addition keeps us inside the disk)
