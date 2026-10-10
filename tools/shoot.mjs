@@ -13,7 +13,7 @@ const port = 9300 + Math.floor(Math.random() * 500);
 const profile = mkdtempSync(join(tmpdir(), 'dynamic-edge-'));
 const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
   `--window-size=${w},${h}`, '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
-  ...(process.env.GPU === 'low' ? [] : ['--force_high_performance_gpu']), '--no-first-run', '--disable-extensions', '--autoplay-policy=no-user-gesture-required', 'about:blank'], {stdio: 'ignore'});
+  ...(process.env.GPU === 'low' ? [] : ['--force_high_performance_gpu']), '--no-first-run', '--disable-extensions', '--autoplay-policy=no-user-gesture-required', ...(process.env.EDGE_ARGS ? process.env.EDGE_ARGS.split(' ') : []), 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const done = code => { try { edge.kill(); } catch {} setTimeout(() => { try { rmSync(profile, {recursive: true, force: true}); } catch {} process.exit(code); }, 400); };
 

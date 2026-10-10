@@ -1,4 +1,6 @@
 /* Frame loop. Order matches the Android host: input → stamps → solve → particles → display. */
+/* Overall pace of the picture, in every preset: everything moves at this share of the speed it was designed at. */
+const PACE=.8;
 const App={
   paused:false,snap:false,rec:null,displayHue:0,look:{exposure:1,hue:0,bloom:0,echoZoom:0,echoTwist:0,time:0},
   last:performance.now(),frames:0,fpsT:0,fps:0,cpu:0,diagT:0,
@@ -46,7 +48,7 @@ const App={
     Tilt.frame(dt);const tl=Tilt.get(P);
     const E=Director.apply(P,dt),beat=Music.beat,energy=Music.energy;
     Trans.watch(E,dt);
-    Space.update(E,this.paused?0:dt,Engine.res,Engine.world,P.aspace*(energy*.4+beat*.5),tl,Tilt.rot(P),E.zp);
+    Space.update(E,this.paused?0:dt*PACE,Engine.res,Engine.world,P.aspace*(energy*.4+beat*.5),tl,Tilt.rot(P),E.zp);
     if(Space.pendingShift){Engine.scrollSheet(Space.pendingShift);Space.pendingShift=null}   // endless canvas: re-centre the world on the camera
     PadPlay.frame(dt);
     Input.frame(dt);
@@ -61,15 +63,15 @@ const App={
     {const a=E.lgt*Math.PI/180;L.orbL=[Math.cos(a)*.7,Math.sin(a)*.7,.75];L.orbRim=paletteRGB(hueBase+E.hr*.35).map(z=>z*.6)}
     L.echoZoom=E.ezoom*.012*dt*60*(1+P.aspace*beat);L.echoTwist=E.etwist*.02*dt*60;L.echoCenter=[tl[0]*.1,tl[1]*.1];L.time=clock;
     if(!this.paused){
-      const sim=dt*P.ts*musicSpeed,n=this.fps&&this.fps<40?1:Math.min(3,Math.ceil(sim/(1/60)-1e-6)),h=sim/Math.max(n,1);   // a slow device takes one bigger step instead of three: no death spiral
+      const sim=dt*PACE*P.ts*musicSpeed,n=this.fps&&this.fps<40?1:Math.min(3,Math.ceil(sim/(1/60)-1e-6)),h=sim/Math.max(n,1);   // a slow device takes one bigger step instead of three: no death spiral
       const pr=Tilt.pour(P),g=[P.wx+pr[0],P.wy+pr[1]];
       const field={mode:E.field|0,str:E.fs*500*(1+P.afield*(Music.bass*2.5+beat)),g,time:clock};
       Geo.inject(dt,E);
       for(let i=0;i<n;i++)Engine.step(h,E,field);
     }
-    Engine.uiStep(dt,dt*P.ts*musicSpeed);
+    Engine.uiStep(dt,dt*PACE*P.ts*musicSpeed);
     const ps=Input.ptr.size?[...Input.ptr.values()][0]:null,emit=ps?[Input.emitAt[0],Input.emitAt[1],1,.06]:[0,0,0,0];
-    Engine.particles(dt*P.ts*Math.min(1,musicSpeed),E,emit,clock,paletteUniforms(),this.paused,dt);
+    Engine.particles(dt*PACE*P.ts*Math.min(1,musicSpeed),E,emit,clock,paletteUniforms(),this.paused,dt);
     UI.frame(dt);
     const dpr=Engine.res[0]/VW(),glass=UI.glass(dpr);
     if(this.rec&&now-this.rec.last>=1000/this.rec.fps){Engine.render(E,L,glass,false);this.rec.ctx.drawImage(cv,0,0,this.rec.c.width,this.rec.c.height);this.rec.last=now}

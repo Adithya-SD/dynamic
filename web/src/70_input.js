@@ -89,6 +89,7 @@ const Music={
   init(){
     audio.onBands=d=>this.ingest(d);
     audio.onSeek=()=>this.resetSync();
+    audio.onHint=(msg,loud)=>{if(msg){UI.audioStatus.textContent=msg;if(loud)notice(msg,4200)}else UI.audioStatus.textContent=({mic:'Listening to the microphone',desktop:'Listening to shared audio'}[audio.state]||'Listening')+'. Finding the beat…'};
     if(NATIVE){window.__nativeBands=(l)=>{const t=performance.now()/1000,s=this.nsig.push(l,t,null);this.ingest({time:t,levels:s.levels,onsets:s.onsets,odf:s.odf,raw:l})};
       window.__nativeAudio=(on,text)=>{this.native=on;this.resetSync();UI.audioStatus.textContent=text;[...UI.srcBtns.children].forEach(b=>b.classList.toggle('on',on?b.dataset.kind==='desktop':b.dataset.kind==='off'))}}
     audio.onState=s=>{const ok=['mic','desktop','file','stream'].includes(s.state);this.resetSync();

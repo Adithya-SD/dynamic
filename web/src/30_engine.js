@@ -1,6 +1,8 @@
 /* Engine: the pass graph shared with Android (app/src/main/cpp/Engine.cpp mirrors it).
    Velocity lives in reference cells/s, 128 cells across the visible short side, so changing
    simulation detail sharpens the fluid without changing how it moves. */
+/* Ink lingers: every fade (dissolve and the slow linear fade) runs at this share of the preset's value. */
+const FADE=.65;
 const REF=128,MAX_VEL=1500,PART_SIDE=256;
 const Engine={
   vel:null,prs:null,div:null,crl:null,dye:null,fwd:null,
@@ -31,7 +33,7 @@ const Engine={
     if(programIfReady(vs,fs,want)){this.live[key]=want;return want}
     return this.live[key]||(this.live[key]=want);
   },
-  BASE:['ghost','blur','shift','pshift','copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
+  BASE:['ghost','blur','stereo','shift','pshift','copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
   /* Compile everything the first frame needs, in parallel. Other spaces follow quietly, one at a time. */
   async warm(onProgress){
     const d=this.spaceDefs(Space.u.uSpace),list=this.BASE.filter(([,f])=>f!=='compose.frag').map(x=>[...x,'']);
@@ -70,7 +72,7 @@ const Engine={
       for(const k in n){const old=this[k];if(Array.isArray(old))old.forEach(kill);else kill(old);this[k]=n[k]}
       if(n.dye){this.undo.forEach(u=>kill(u));this.undo=[]}
       if(n.ptx){kill(this.ptx2);this.ptx2=null}
-      if(n.scene){Trans.free();this.lastFrame=null;kill(this.echo);this.echo=null;if(this.dof){this.dof.forEach(kill);this.dof=null}}
+      if(n.scene){Trans.free();this.lastFrame=null;if(this.stereo){kill(this.stereo);this.stereo=null}kill(this.echo);this.echo=null;if(this.dof){this.dof.forEach(kill);this.dof=null}}
       Space.inkSize=s.ink;this.sim=s.sim;this.ink=s.ink;this.res=s.res;this.world=s.world;
       cv.width=s.res[0];cv.height=s.res[1];this.error='';return true;
     }catch(e){made.forEach(kill);this.error='GPU allocation failed; kept previous quality. '+e.message;return false}
@@ -106,7 +108,7 @@ const Engine={
     pass('gradient.frag',{uP:this.prs.r,uVel:this.vel.r,uTx:tx},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.vel.r,uRefTx:ref,uDt:dt,uDiss:P.vel},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.dye.r,uRefTx:ref,uDt:dt,uDiss:0},this.fwd);
-    pass('maccormack.frag',{uVel:this.vel.r,uSrc:this.dye.r,uFwd:this.fwd,uRefTx:ref,uSrcTx:[1/this.ink[0],1/this.ink[1]],uDt:dt,uDiss:P.den,uSub:.006+.008*P.den},this.dye.w);this.dye.swap();
+    pass('maccormack.frag',{uVel:this.vel.r,uSrc:this.dye.r,uFwd:this.fwd,uRefTx:ref,uSrcTx:[1/this.ink[0],1/this.ink[1]],uDt:dt,uDiss:P.den*FADE,uSub:(.006+.008*P.den)*FADE},this.dye.w);this.dye.swap();
   },
 
   particles(dt,P,emit,time,palette,paused,fdt){
@@ -137,8 +139,8 @@ const Engine={
     /* A blurred copy of the picture (quarter size, then eighth size run through a Gaussian) for the glass panels and for the
        ball's depth of field. Built only when one of them is on screen. */
     let farA=this.black,farB=this.black,dof=0;
-    const frost=glass.n>0&&toScreen&&P.blr>.5,ball=sp.uOrb>0&&P.odepth>0;
-    if(frost||ball){
+    const st=P.stm|0,frost=glass.n>0&&toScreen&&P.blr>.5&&!st,ball=sp.uOrb>0&&P.odepth>0;
+    if(frost||ball||st){
       const qw=Math.max(1,res[0]>>2),qh=Math.max(1,res[1]>>2),ew=Math.max(1,res[0]>>3),eh=Math.max(1,res[1]>>3);
       if(!this.dof||this.dof[0].w!==qw||this.dof[0].h!==qh){if(this.dof)this.dof.forEach(kill);this.dof=[target(qw,qh,'rgba16f'),target(ew,eh,'rgba16f'),target(ew,eh,'rgba16f')]}
       const D=this.dof,sc=Math.min(3,(frost?P.blr:14)*res[0]/VW()*.044);   // Gaussian width in eighth-size texels
@@ -157,10 +159,18 @@ const Engine={
       for(let i=B.length-2;i>=0;i--)pass('bloom_up.frag',{uSrc:B[i+1],uTx:[.5/B[i+1].w,.5/B[i+1].h]},B[i]);
       gl.disable(gl.BLEND);bloomTex=B[0];bloomAmt=look.bloom*.45;
     }
-    if(toScreen)this.lastFrame={base,bloom:bloomTex,amt:bloomAmt};
+    // Stereo: depth is read from the blurred copies, then each eye's picture is composed into one image the glass and film
+    // passes treat like any other.
+    let img=base,gb=bloomTex,gamt=bloomAmt,dofF=dof,lensF=P.lens;
+    if(st){
+      if(!this.stereo||this.stereo.w!==res[0]||this.stereo.h!==res[1]){kill(this.stereo);this.stereo=target(res[0],res[1],'rgba16f')}
+      pass('stereo.frag',{uImg:base,uBloom:bloomTex,uBloomAmt:bloomAmt,uFarA:farA,uFarB:farB,uRes:res,uMode:st,uDepth:P.sdep,uConv:P.scnv,uSwap:P.ssw,uInv:P.sinv,uLens:P.slens,uOrb:sp.uOrb,uDof:dof},this.stereo);
+      img=this.stereo;gb=this.black;gamt=0;dofF=0;lensF=0;
+    }else if(this.stereo){kill(this.stereo);this.stereo=null}
+    if(toScreen)this.lastFrame={base:img,bloom:gb,amt:gamt};
     const dp=res[0]/VW();
-    pass('final.frag',{...Trans.uniforms(look),uUi:this.ui.on?this.ui.r:this.black,uUiA:this.ui.on?this.ui.a:0,uImg:base,uBloom:bloomTex,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dof,uBlack:Math.min(.38,Exposure.bpS+P.blk*.45),uSharp:P.shp,uRes:res,uBloomAmt:bloomAmt,uVig:P.vig,uContrast:P.ctr,uGrain:P.grain,uLens:P.lens,uTime:look.time,uDp:dp,
-      uR:glass.R,uQ:glass.Q,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:P.blr,uBezel:P.bzl,uDisp:P.dsp},out);
+    pass('final.frag',{...Trans.uniforms(look),uUi:this.ui.on?this.ui.r:this.black,uUiA:this.ui.on?this.ui.a:0,uImg:img,uBloom:gb,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dofF,uBlack:Math.min(.38,Exposure.bpS+P.blk*.45),uSharp:P.shp,uRes:res,uBloomAmt:gamt,uVig:P.vig,uContrast:P.ctr,uGrain:P.grain,uLens:lensF,uTime:look.time,uDp:dp,
+      uR:glass.R,uQ:glass.Q,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:st?0:P.blr,uBezel:P.bzl,uDisp:P.dsp},out);
   },
   /* Clean frame (no interface) read straight from an offscreen target: works even when the page is not being presented. */
   capture(P,look,glass){

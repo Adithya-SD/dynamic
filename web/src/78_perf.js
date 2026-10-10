@@ -72,9 +72,9 @@ const Exposure={
     if(!P.aex){this.k=1;return}
     // Leave a well-lit frame alone. Pull back only when the top of the picture clips; lift only when it is nearly black.
     let want=0;
-    if(p98>.93||p90>.85)want=-.7;else if(p98<.06)return;else if(p90<.12)want=Math.min(.25,Math.log(.2/Math.max(p90,.03)));
+    if(p98>.93||p90>.85)want=-1.2;else if(p98<.06)return;else if(p90<.12)want=Math.min(.25,Math.log(.2/Math.max(p90,.03)));
     else want=Math.log(1/this.k)*.5;   // otherwise drift back to neutral
-    this.k=clamp(this.k*Math.exp(clamp(want,-.8,.4)*dt/1.2),.55,1.3);
+    this.k=clamp(this.k*Math.exp(clamp(want,-1.2,.4)*dt/.9),.3,1.3);   // can pull back to 30%: ink that lingers must never blow out to white
   },
   reset(){this.k=1}
 };

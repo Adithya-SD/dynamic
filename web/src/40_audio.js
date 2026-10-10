@@ -149,7 +149,7 @@
           if (ctx.state !== 'running') try { await ctx.resume(); } catch (_) { }
           this._source = ctx.createMediaStreamSource(stream);
           const status = await this._connectAnalysis(this._source, generation);
-          if (generation === this._generation) this._state('mic', status);
+          if (generation === this._generation) { this._state('mic', status); this._watch('mic', generation); }
           return;
         }
         if (kind === 'desktop') {
@@ -169,7 +169,7 @@
           audioTracks[0].addEventListener('ended', () => { if (generation === this._generation) this.stop(); });
           this._source = ctx.createMediaStreamSource(stream);
           const status = await this._connectAnalysis(this._source, generation);
-          if (generation === this._generation) this._state('desktop', status);
+          if (generation === this._generation) { this._state('desktop', status); this._watch('desktop', generation); }
           return;
         }
         if (!root.document) throw new Error('HTML media playback is unavailable.');
@@ -187,12 +187,13 @@
         this._state(kind, status);
       } catch (e) { if (generation !== this._generation) return; this._releaseAll(); this._state('error', e && e.message || String(e)); throw e; }
     }
-    async _connectAnalysis(source, generation) {
+    async _connectAnalysis(source, generation, skip) {
+      skip = skip || 0;
       const ctx = this._ctx;
       let mode = null;
       const mute = () => { if (!this._mute) { this._mute = ctx.createGain(); this._mute.gain.value = 0; this._mute.connect(ctx.destination); } return this._mute; }; // keeps the graph pulling
       // 1. AudioWorklet (audio thread). Some browsers refuse blob: modules on file:// pages, so a data: URL is tried too.
-      if (ctx.audioWorklet && root.Blob && root.URL && URL.createObjectURL && !root.__noWorklet) {
+      if (ctx.audioWorklet && root.Blob && root.URL && URL.createObjectURL && !root.__noWorklet && skip < 1) {
         const src = workletSource();
         const makers = [() => URL.createObjectURL(new Blob([src], { type: 'application/javascript' })), () => 'data:application/javascript;base64,' + btoa(unescape(encodeURIComponent(src)))];
         for (const make of makers) {
@@ -208,7 +209,7 @@
         }
       }
       // 2. ScriptProcessor on the main thread: the same analysis code, same quality, just not on the audio thread.
-      if (!mode && ctx.createScriptProcessor && !root.__noScript) {
+      if (!mode && ctx.createScriptProcessor && !root.__noScript && skip < 2) {
         try {
           const core = analysisCore(ctx.sampleRate), node = ctx.createScriptProcessor(512, 2, 1), mono = new Float32Array(128), sr = ctx.sampleRate;
           node.onaudioprocess = e => {
@@ -232,6 +233,46 @@
       }
       return null;
     }
+    /* Live sources only. Once a second: is the context running, are analysis frames arriving, is anything audible?
+       No frames → fall back one analysis mode (AudioWorklet → ScriptProcessor → analyser) instead of staying dead.
+       Frames but only silence → say so, with the usual cause for that source. */
+    _watch(kind, generation) {
+      this._unwatch();
+      let dead = 0, mute = 0, said = false, tapped = false, hinted = false;
+      const hint = kind === 'mic' ? 'The microphone is connected but hears nothing. Check the right input is chosen in the system sound settings and that the mic is not muted.'
+        : 'Sharing started, but the shared audio is silent. In the share window choose Entire screen and tick “Share system audio” (or pick the tab that plays the music), and make sure music is playing.';
+      this._dog = root.setInterval(() => {
+        const ctx = this._ctx, now = root.performance ? performance.now() : Date.now();
+        if (generation !== this._generation || !ctx) { this._unwatch(); return; }
+        if (ctx.state !== 'running') {
+          ctx.resume().catch(() => { });
+          if (!tapped && root.document) { tapped = true; const go = () => { ctx.resume().catch(() => { }); }; document.addEventListener('pointerdown', go, { once: true }); }
+          hinted = true; if (typeof this.onHint === 'function') this.onHint('The browser paused audio. Tap the screen once to let Dynamic listen.');
+          return;
+        }
+        if (hinted) { hinted = false; if (typeof this.onHint === 'function') this.onHint(null); }
+        if (!this._lastEmit || now - this._lastEmit > 1500) {
+          if (++dead >= 2) {
+            dead = 0;
+            const next = this.analysisMode === 'worklet' ? 1 : this.analysisMode === 'script' ? 2 : 0;
+            if (next && this._source) { this._detach(); this._connectAnalysis(this._source, generation, next).then(() => { if (generation === this._generation && typeof this.onHint === 'function') this.onHint(null); }).catch(() => { }); }
+            else if (typeof this.onHint === 'function') this.onHint('Dynamic cannot analyse this source in this browser. Try the file option, or open it in Chrome or Edge.');
+          }
+          return;
+        }
+        dead = 0;
+        if (this.signal.loud < 2e-5) { if (++mute >= 4 && !said) { said = true; if (typeof this.onHint === 'function') this.onHint(hint, true); } }
+        else { mute = 0; if (said) { said = false; if (typeof this.onHint === 'function') this.onHint(null); } }
+      }, 1000);
+    }
+    _unwatch() { if (this._dog) { root.clearInterval(this._dog); this._dog = null; } }
+    _detach() {
+      if (this._fallbackTimer !== null) { root.clearInterval(this._fallbackTimer); this._fallbackTimer = null; }
+      if (this._worklet) { this._worklet.port.onmessage = null; try { this._worklet.disconnect(); } catch (_) { } this._worklet = null; }
+      if (this._proc) { this._proc.onaudioprocess = null; try { this._proc.disconnect(); } catch (_) { } this._proc = null; }
+      if (this._analyser) { try { this._analyser.disconnect(); } catch (_) { } this._analyser = null; }
+      if (this._source) { try { this._source.disconnect(); } catch (_) { } }
+    }
     _fallback() {
       if (!this._analyser || !this._ctx) return;
       this._analyser.getFloatFrequencyData(this._freq);
@@ -245,6 +286,7 @@
     }
     _emit(raw, time, odf) {
       const now = root.performance ? performance.now() : Date.now();
+      this._lastEmit = now;
       if (!this._reportStart) this._reportStart = now; this._reportCount++;
       if (now - this._reportStart >= 500) { this.analysisHz = this._reportCount * 1000 / (now - this._reportStart); this._reportCount = 0; this._reportStart = now; }
       const s = this.signal.push(raw, Number(time) || 0, odf);
@@ -258,6 +300,7 @@
     async stop() { this._generation++; this._releaseAll(); this._kind = 'off'; this.analysisHz = 0; this._reportCount = 0; this._reportStart = 0; this.position = 0; this.duration = 0; this.file = null; this._state('off'); }
     _releaseStream() { if (this._stream) { for (const t of this._stream.getTracks()) try { t.stop(); } catch (_) { } this._stream = null; } this._videoTrack = null; }
     _releaseAll() {
+      this._unwatch();
       if (this._fallbackTimer !== null) { root.clearInterval(this._fallbackTimer); this._fallbackTimer = null; }
       if (this._worklet) { this._worklet.port.onmessage = null; try { this._worklet.disconnect(); } catch (_) { } this._worklet = null; }
       if (this._proc) { this._proc.onaudioprocess = null; try { this._proc.disconnect(); } catch (_) { } this._proc = null; }
