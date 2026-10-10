@@ -3,7 +3,7 @@
 #include "space.glsl"
 in vec2 v;out vec4 o;
 uniform sampler2D uDye,uPart,uCurl;
-uniform float uExposure,uHue,uParityHue,uChroma,uPartOn,uFloor,uVib;
+uniform float uExposure,uHue,uParityHue,uChroma,uPartOn,uFloor,uVib,uTone;
 // Geometry outline: the pattern itself, crisp, sampled at the same folded sheet position as the ink.
 uniform sampler2D uGeo;uniform vec2 uGeoAsp;uniform vec4 uGeoT;uniform float uGeoLine;uniform vec3 uGeoA,uGeoB,uGeoC;uniform float uGeoNest;
 void main(){
@@ -27,10 +27,13 @@ void main(){
   {float g=dot(z,vec3(.299,.587,.114));z=max(vec3(g)+(z-g)*uVib,0.);}
   // Soft black floor: faint haze (z << floor) is crushed towards black, real ink loses only the floor. Keeps contrast.
   if(uFloor>0.){float l=max(z.r,max(z.g,z.b));z*=l/(l+uFloor);}
-  // Hue-preserving tone map: the brightest channel is compressed and the others keep their ratio to it, so dense ink
-  // stays saturated instead of washing to white. Only very hot cores roll gently towards white.
-  float m=max(z.r,max(z.g,z.b)),mm=1.-exp(-m*uExposure);
-  vec3 c=m>1e-6?z*(mm/m):vec3(0.);
-  c=mix(c,vec3(mm),clamp((m*uExposure-2.5)/7.,0.,.45));
+  vec3 c;
+  if(uTone>.5){
+    // Colour-true tone map: the brightest channel is compressed and the others keep their ratio to it, so dense ink
+    // stays saturated instead of washing to white. Only very hot cores roll gently towards white.
+    float m=max(z.r,max(z.g,z.b)),mm=1.-exp(-m*uExposure);
+    c=m>1e-6?z*(mm/m):vec3(0.);
+    c=mix(c,vec3(mm),clamp((m*uExposure-2.5)/7.,0.,.45));
+  }else c=1.-exp(-z*uExposure);   // classic: the look every original preset was tuned on
   o=vec4(c,luma(c));
 }

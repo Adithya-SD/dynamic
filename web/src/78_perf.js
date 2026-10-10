@@ -8,10 +8,10 @@
    quarter is steered towards a fixed level, so a sparse frame is not blown out and a dense one is not pushed white. */
 const Gov={
   first:true,level:0,refresh:60,cap:0,iv:[],queries:[],gpu:0,fps:0,slowN:0,fastN:0,last:0,tLast:0,
-  LEVELS:[[1,1,1,1],[.85,.85,.875,.85],[.72,.72,.75,.7],[.62,.6,.625,.6],[.52,.5,.5,.5],[.44,.45,.44,.45]],
+  LEVELS:[[1,1,1,1,.9],[.85,.85,.875,.85,.8],[.72,.72,.75,.7,.7],[.62,.6,.625,.6,.6],[.52,.5,.5,.5,.6],[.44,.45,.44,.45,.6]],
   auto(){return!P.qual},
   lvl(){return this.auto()?this.level:[0,0,1,3,4,5][P.qual|0]},
-  quality(Q){const L=this.LEVELS[this.lvl()];return{...Q,rscale:Q.rscale*L[0],inkq:Q.inkq*L[1],sim:Math.max(96,Math.round(Q.sim*L[2]/16)*16)}},
+  quality(Q){const L=this.LEVELS[this.lvl()];return{...Q,rscale:Q.rscale*L[0],inkq:Q.inkq*L[1],sim:Math.max(96,Math.round(Q.sim*L[2]/16)*16),pq:L[4]}},
   iters(dt){const L=this.LEVELS[this.lvl()][3];return Math.max(6,Math.round(P.it*L*Math.min(1,dt*60*1.1+.25)))},
   /* Every rAF timestamp, drawn or not: the median interval is the display refresh. */
   raf(now){if(this.tLast){const d=now-this.tLast;this.lastD=Math.max(d,(this.lastD||0)*.9);if(d>2&&d<250){this.iv.push(d);if(this.iv.length>90)this.iv.shift()}}this.tLast=now;
@@ -63,12 +63,14 @@ const Exposure={
     const v=new Float32Array(256);for(let i=0;i<256;i++)v[i]=Math.max(this.px[i*4],this.px[i*4+1],this.px[i*4+2])/255;
     v.sort();let top=0;for(let i=192;i<256;i++)top+=v[i];top/=64;const p50=v[128],p90=v[230],p98=v[250];
     this.top=p90;this.p98=p98;
-    if(p98<.06)return;   // nearly empty frame: hold, never boost darkness into noise
-    // Steer the highlights (90th percentile) to .72; back off fast if the top 2 % clip.
-    // ... and keep the middle of the frame dark enough that the picture has depth (median ≤ .3).
-    const want=p98>.96?-.8:Math.min(Math.log(.72/Math.max(p90,.02)),Math.log(.3/Math.max(p50,.01))),dt=this.dtSteer||.25;
     this.p50=p50;
-    this.k=clamp(this.k*Math.exp(clamp(want,-.8,.4)*dt/1.2),.5,2.4);
+    const dt=this.dtSteer||.25;
+    if(!P.aex){this.k=1;return}
+    // Leave a well-lit frame alone. Pull back only when the top of the picture clips; lift only when it is nearly black.
+    let want=0;
+    if(p98>.93||p90>.85)want=-.7;else if(p98<.06)return;else if(p90<.12)want=Math.min(.25,Math.log(.2/Math.max(p90,.03)));
+    else want=Math.log(1/this.k)*.5;   // otherwise drift back to neutral
+    this.k=clamp(this.k*Math.exp(clamp(want,-.8,.4)*dt/1.2),.55,1.3);
   },
   reset(){this.k=1}
 };

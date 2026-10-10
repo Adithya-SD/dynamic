@@ -123,7 +123,7 @@ const Music={
       if(lv>.02&&!App.paused&&P.aring>0){
         const n=pv?Math.max(1,Math.min(4,Math.ceil(Math.hypot(pt[0]-pv[0],pt[1]-pv[1])/10))):1,f=lv*P.frc*.009*P.aring*dt*60/n;
         for(let k=1;k<=n;k++){const t=k/n,x=pv?pv[0]+(pt[0]-pv[0])*t:pt[0],y=pv?pv[1]+(pt[1]-pv[1])*t:pt[1];
-          Input.emit(x,y,-Math.sin(a)*f,Math.cos(a)*f,inkColor(i,lv*180,x/W,1-y/H,i).map(z=>z*.13*lv*dt*60/n*P.aring),r*.22)}
+          Input.emit(x,y,-Math.sin(a)*f,Math.cos(a)*f,inkColor(i,lv*180,x/W,1-y/H,i).map(z=>z*.28*lv*dt*60/n*P.aring),r*.22)}
       }
       this.prev[i]=pt;
     }
@@ -147,7 +147,7 @@ const Music={
     while(this.events.length&&n++<64){const[b,s]=this.events.shift(),lv=Math.min(1,s*P.msn);this.onset=Math.max(this.onset,lv);
       if(!P.bpu||App.paused)continue;
       const a=this.angles[b]+b*GOLDEN_ANGLE,R=S*(.025+.42*b/23),x=W/2+Math.cos(a)*R,y=H/2-Math.sin(a)*R,f=P.frc*.013*lv*P.abeat;
-      Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(b,150,x/W,1-y/H,b).map(z=>z*.12*lv),r*.3)}
+      Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(b,150,x/W,1-y/H,b).map(z=>z*.2*lv),r*.3)}
     // One pulse for everything: predicted beats when the clock is sure, raw onsets when it is not (ambient, rubato).
     const c=Math.min(1,this.conf*1.3);
     this.beat=Math.max(c*this.pulse,(1-c*.7)*this.onset,this.drop);

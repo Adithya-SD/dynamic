@@ -5,7 +5,7 @@ const TAU=Math.PI*2,PHI=(1+Math.sqrt(5))/2;
 const mirror1=x=>1-Math.abs(((x%2)+2)%2-1);
 const Space={
   spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,
-  u:{uLoop:48,uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
+  u:{uLoop:48,uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
   hyperbolic(p,q){
     p=Math.round(p);q=Math.round(q);
     if((p-2)*(q-2)<=4)q=Math.floor(2+4/(p-2))+1;
@@ -15,7 +15,8 @@ const Space={
     const xm=Math.max(cx-r,bx),ym=by,s=.9/Math.max(xm,ym);
     return{hyp:[cx,r,s,p],off:[.5-xm*s/2,.5-ym*s/2],q};
   },
-  update(P,dt,res,world,pulse){
+  update(P,dt,res,world,pulse,tl){
+    tl=tl||[0,0];
     const u=this.u,k=1+pulse;
     this.spin+=P.spin*dt*k;
     const d=P.drift*k;
@@ -23,9 +24,11 @@ const Space={
     this.mobA+=dt*.23*Math.sign(d||1);
     this.phase[0]+=d*dt*.5;this.phase[1]-=d*dt*.35;
     this.poleT+=dt*(.05+Math.abs(d)*.08);
-    u.uSpace=P.space|0;u.uRes=res;u.uWorld=world;u.uSegs=P.kal;u.uDepth=P.foldDepth;u.uSpin=this.spin;u.uTile=P.tile;u.uShift=this.shift;
-    if(u.uSpace===3){const h=this.hyperbolic(P.hp,P.hq);u.uHyp=h.hyp;u.uHypOff=h.off;const m=Math.min(.62,Math.abs(P.drift)*.7);u.uMob=[m*Math.cos(this.mobA),m*Math.sin(this.mobA)]}
-    const g=Math.max(1.01,P.growth),lnS=Math.log(g);u.uSpiral=[lnS/TAU,lnS,Math.max(1,Math.round(P.arms)),0];u.uSpiralPhase=this.phase;
+    u.uSpace=P.space|0;u.uRes=res;u.uWorld=world;u.uSegs=P.kal;u.uDepth=P.foldDepth;u.uSpin=this.spin;u.uTile=P.tile;
+    const hw=[.9,.6,.5,.3,.4,.4][u.uSpace]||.5;u.uTilt=[tl[0]*hw,tl[1]*hw];
+    u.uShift=u.uSpace===2?[this.shift[0]+tl[0]*.35,this.shift[1]+tl[1]*.35]:this.shift;
+    if(u.uSpace===3){const h=this.hyperbolic(P.hp,P.hq);u.uHyp=h.hyp;u.uHypOff=h.off;const m=Math.min(.62,Math.abs(P.drift)*.7);let mx=m*Math.cos(this.mobA)+tl[0]*.55,my=m*Math.sin(this.mobA)+tl[1]*.55;const ml=Math.hypot(mx,my);if(ml>.86){mx*=.86/ml;my*=.86/ml}u.uMob=[mx,my]}   // tilting walks you through the tiling
+    const g=Math.max(1.01,P.growth),lnS=Math.log(g);u.uSpiral=[lnS/TAU,lnS,Math.max(1,Math.round(P.arms)),0];u.uSpiralPhase=[this.phase[0]+tl[0]*.6,this.phase[1]+tl[1]*.6];
     const ar=res[0]/res[1],gx=(.5-1/PHI/PHI)*Math.max(ar,1),gy=(.5-1/PHI/PHI)*Math.max(1/ar,1),w=this.poleT;
     u.uPoles=[-gx+.03*Math.cos(w),gy+.03*Math.sin(w*1.3),gx+.03*Math.cos(w*.8+2),-gy+.03*Math.sin(w+1)];
   },
@@ -33,6 +36,7 @@ const Space={
   map(fx,fy){
     const u=this.u,R=u.uRes,sh=Math.min(R[0],R[1]);
     let qx=(fx-.5*R[0])/sh,qy=(fy-.5*R[1])/sh;
+    {const dn=Math.max(.3,1+qx*u.uTilt[0]+qy*u.uTilt[1]);qx/=dn;qy/=dn}
     const rot=(x,y,a)=>{const c=Math.cos(a),s=Math.sin(a);return[c*x-s*y,s*x+c*y]};
     const sheet=(x,y)=>[.5+x*sh/R[0]/u.uWorld,.5+y*sh/R[1]/u.uWorld];
     switch(u.uSpace){

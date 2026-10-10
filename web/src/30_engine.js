@@ -47,9 +47,9 @@ const Engine={
     const dpr=Math.min(devicePixelRatio||1,2),rw=Math.max(64,Math.round(VW()*dpr*Q.rscale)),rh=Math.max(64,Math.round(VH()*dpr*Q.rscale));
     const a=rw/rh,w=Q.world,max=gl.getParameter(gl.MAX_TEXTURE_SIZE);
     const dims=(short)=>{const s=Math.min(short*w,max);return a>=1?[Math.min(max,Math.round(s*a)),Math.round(s)]:[Math.round(s),Math.min(max,Math.round(s/a))]};
-    const sim=dims(Q.sim),ink=dims(Math.min(2048,Math.round(Math.min(rw,rh)*Q.inkq)));
-    const bytes=sim[0]*sim[1]*(4*2+2*2+2+2)+ink[0]*ink[1]*8*3+rw*rh*8*4+ink[0]*ink[1]*8+PART_SIDE*PART_SIDE*32;
-    return{res:[rw,rh],sim,ink,bytes,world:w};
+    const sim=dims(Q.sim),ink=dims(Math.min(2048,Math.round(Math.min(rw,rh)*Q.inkq))),pq=Q.pq||.6;
+    const bytes=sim[0]*sim[1]*(4*2+2*2+2+2)+ink[0]*ink[1]*8*3+rw*rh*8*4+ink[0]*ink[1]*8*pq*pq+PART_SIDE*PART_SIDE*32;
+    return{res:[rw,rh],sim,ink,bytes,world:w,pq};
   },
   /* (Re)allocate. Keeps ink across size changes; on failure the previous allocation stays live. */
   allocate(Q,force){
@@ -62,8 +62,10 @@ const Engine={
       const wrap={wrap:this.wrap};
       const n={};
       if(force||!simSame){n.vel=PR(...s.sim,'rg16f',wrap);n.prs=PR(...s.sim,'r16f',wrap);n.div=T(...s.sim,'r16f',wrap);n.crl=T(...s.sim,'r16f',wrap)}
-      if(force||!inkSame){n.dye=PR(...s.ink,'rgba16f',wrap);n.fwd=T(...s.ink,'rgba16f',wrap);n.ptx=T(...s.ink,'rgba16f');
+      if(force||!inkSame){n.dye=PR(...s.ink,'rgba16f',wrap);n.fwd=T(...s.ink,'rgba16f',wrap);
         if(this.dye){pass('copy.frag',{uSrc:this.dye.r,uScale:1},n.dye.r)}}
+      const pw=Math.round(s.ink[0]*s.pq),ph=Math.round(s.ink[1]*s.pq);
+      if(force||!this.ptx||this.ptx.w!==pw||this.ptx.h!==ph)n.ptx=T(pw,ph,'rgba16f');
       if(force||!resSame){n.scene=T(...s.res,'rgba16f');n.lit=T(...s.res,'rgba16f');n.bloom=[];let bw=s.res[0],bh=s.res[1];for(let i=0;i<5;i++){bw=Math.max(1,bw>>1);bh=Math.max(1,bh>>1);n.bloom.push(T(bw,bh,'rgba16f'))}}
       for(const k in n){const old=this[k];if(Array.isArray(old))old.forEach(kill);else kill(old);this[k]=n[k]}
       if(n.dye){this.undo.forEach(u=>kill(u));this.undo=[]}
@@ -113,8 +115,9 @@ const Engine={
     pass('fade.frag',{uAlpha:1-Math.pow(P.ptl,dt*60)},this.ptx);
     gl.blendFunc(gl.ONE,gl.ONE);
     const prog=program('particles.vert','particles.frag');gl.useProgram(prog.p);
-    const scale=this.ptx.w/Math.max(1,this.res[0]/Math.min(devicePixelRatio||1,2));
-    setUniforms(prog,{uState:this.parts.r,uVel:this.vel.r,uSide:PART_SIDE,uTarget:[this.ptx.w,this.ptx.h],uRefTx:this.refTx(),uSize:P.psz*Math.max(1,scale),uStretch:P.fx===4?2.2:1.1,uBright:P.pbr*.32,uMode:P.fx,uTime:time,uSat:P.s,uHue:P.h,uHueRange:P.hr,...palette});
+    // Footprint in screen pixels is the same at any particle resolution (0.6 is the phone look); a higher one only sharpens it.
+    const pq=this.ptx.w/this.ink[0],scale=this.ink[0]*.6/Math.max(1,this.res[0]/Math.min(devicePixelRatio||1,2));
+    setUniforms(prog,{uState:this.parts.r,uVel:this.vel.r,uSide:PART_SIDE,uTarget:[this.ptx.w,this.ptx.h],uRefTx:this.refTx(),uSize:P.psz*Math.max(1,scale)*pq/.6,uStretch:P.fx===4?2.2:1.1,uBright:P.pbr*.32,uMode:P.fx,uTime:time,uSat:P.s,uHue:P.h,uHueRange:P.hr,...palette});
     bindOut(this.ptx);gl.bindVertexArray(emptyVao);gl.drawArraysInstanced(gl.TRIANGLES,0,6,Math.max(1,Math.round(P.pn*PART_SIDE*PART_SIDE)));
     gl.disable(gl.BLEND);
   },
@@ -122,13 +125,13 @@ const Engine={
   /* Display: compose (fold once) → material → echo → bloom → final (glass, film). */
   render(P,look,glass,toScreen=true,out=null){
     const res=this.res,sp=Space.u;
-    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.5,uVib:P.vib,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
+    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.5,uVib:P.vib,uTone:P.tone,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
     let base=this.scene;
     if(P.rel>0||P.met>0||P.irs>0||P.fre>0){pass('material.frag',{uScene:this.scene,uTx:[1/res[0],1/res[1]],uRelief:P.rel,uSharp:P.spc,uLight:P.lgt*Math.PI/180,uMetal:P.met,uIris:P.irs,uRim:P.fre,uShine:0},this.lit);base=this.lit}
     if(P.echo>0){
       if(!this.echo)this.echo=pair(...res,'rgba16f');
       const a=res[0]/res[1];
-      pass('echo.frag',{uCur:base,uPrev:this.echo.r,uEcho:P.echo,uZoom:look.echoZoom,uTwist:look.echoTwist,uAspect:a>=1?[a,1]:[1,1/a]},this.echo.w);this.echo.swap();base=this.echo.r;
+      pass('echo.frag',{uCur:base,uPrev:this.echo.r,uEcho:P.echo,uZoom:look.echoZoom,uTwist:look.echoTwist,uCenter:look.echoCenter||[0,0],uAspect:a>=1?[a,1]:[1,1/a]},this.echo.w);this.echo.swap();base=this.echo.r;
     }else if(this.echo){kill(this.echo);this.echo=null}
     let bloomTex=this.black,bloomAmt=0;
     if(look.bloom>0){

@@ -18,6 +18,7 @@ uniform vec2 uMob;      // disk automorphism parameter, |uMob|<1
 uniform vec4 uSpiral;   // k=ln(growth)/2pi, ln(growth), arms, unused
 uniform vec2 uSpiralPhase;
 uniform vec4 uPoles;    // pole A xy, pole B xy (short-side units)
+uniform vec2 uTilt;     // 3D tilt of the plane (gyro or mouse), already weighted per space
 uniform int uLoop;      // fold iteration cap; a uniform bound keeps D3D shader compilers from unrolling
 float gParity;          // number of mirror flips; tints alternate tiles
 
@@ -26,6 +27,7 @@ vec2 sheetUV(vec2 q){float s=min(uRes.x,uRes.y);return .5+q*s/uRes/uWorld;}
 vec2 spaceMap(vec2 fc){
   float sh=min(uRes.x,uRes.y);
   vec2 q=(fc-.5*uRes)/sh;
+  q/=max(.3,1.+dot(q,uTilt));   // perspective foreshortening of the tilted plane
   gParity=0.;
 #if SPACE==1
   q=rot2(q,uSpin);

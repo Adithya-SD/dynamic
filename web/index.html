@@ -21,7 +21,7 @@ svg{fill:none;stroke:#fff;stroke-linecap:round;stroke-linejoin:round}
 .k.on{background:rgba(255,255,255,.17)}.k:active{background:rgba(255,255,255,.28)}
 .k svg{width:25px;height:25px;stroke-width:1.8}
 .k i{position:absolute;right:7px;bottom:5px;font:650 10px var(--f);font-style:normal}
-#sh{left:12px;right:12px;bottom:calc(94px + env(safe-area-inset-bottom,0px));height:min(62vh,560px);border-radius:38px;overflow:hidden;opacity:0;transform:translateY(26px) scale(.93);transform-origin:50% 100%;pointer-events:none;transition:opacity .35s,transform .6s cubic-bezier(.2,.9,.25,1.1);display:flex;flex-direction:column}
+#sh{left:0;right:0;margin:0 auto;width:min(560px,calc(100vw - 24px));bottom:calc(94px + env(safe-area-inset-bottom,0px));height:min(62vh,560px);border-radius:38px;overflow:hidden;opacity:0;transform:translateY(26px) scale(.93);transform-origin:50% 100%;pointer-events:none;transition:opacity .35s,transform .6s cubic-bezier(.2,.9,.25,1.1);display:flex;flex-direction:column}
 #sh.o{opacity:1;transform:none;pointer-events:auto}
 #tabs{display:flex;margin:8px auto 6px;width:max-content;max-width:calc(100% - 20px);padding:4px;border-radius:22px;background:rgba(255,255,255,.1);gap:2px;flex:none;overflow-x:auto;scrollbar-width:none}#tabs::-webkit-scrollbar{display:none}
 #tabs button{display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border-radius:18px;opacity:.68;transition:opacity .3s,padding .35s}
@@ -88,7 +88,7 @@ textarea{resize:vertical;margin:0 0 10px;font-family:ui-monospace,monospace;font
 #dlg h2{margin:0 0 14px;font:650 17px var(--f);display:flex;justify-content:space-between;align-items:center}
 #note{left:50%;top:calc(70px + env(safe-area-inset-top,0px));transform:translateX(-50%);padding:12px 18px;max-width:min(520px,calc(100vw - 32px));font-size:13px;line-height:1.4;text-align:center}
 .res h5:first-child{margin-top:4px}
-@media(min-width:820px),(max-height:520px) and (orientation:landscape){#sh{left:auto;right:14px;width:min(420px,46vw);top:14px;height:auto;bottom:calc(94px + env(safe-area-inset-bottom,0px))}}
+
 #boot{position:fixed;inset:0;z-index:9;display:grid;place-content:center;gap:18px;justify-items:center;background:#05060a;transition:opacity .6s}
 #boot.out{opacity:0;pointer-events:none}#boot b{font:650 22px var(--f);letter-spacing:.4px}#boot p{margin:0;font-size:13px;color:#fff8}
 #boot i{display:block;width:150px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;--p:.08}#boot i:after{content:"";display:block;height:100%;background:#fff;transform-origin:0 50%;transform:scaleX(var(--p));transition:transform .3s}

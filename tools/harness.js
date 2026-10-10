@@ -1,6 +1,6 @@
 /* Dev harness, loaded only with ?dev. Drives frames deterministically and posts snapshots to tools/dev_server.py. */
 window.H={
-  grab(){return Engine.capture(P,App.look,UI.glass(Engine.res[0]/innerWidth))},
+  grab(){return Engine.capture(typeof Director!=="undefined"&&Director.E.h!==undefined?Director.E:P,App.look,UI.glass(Engine.res[0]/innerWidth))},
   run(n,fn){let t=App.last;for(let i=0;i<n;i++){t+=1000/60;fn&&fn(i/n);App.tick(t)}},
   async snap(name,w=640){
     const src=this.grab(),c=document.createElement('canvas');c.width=w;c.height=Math.round(w*src.height/src.width);

@@ -75,11 +75,11 @@ const Geo={
    pattern, parts = particles drive the picture (style forced), pull = particle speed towards / along the lines. */
 const GEO_BEH=[
   {n:'Glow',line:1,ink:.35},
-  {n:'Swarm',line:.08,ink:.05,parts:1,pull:.7,push:.5,style:{fx:3,pn:1,psz:1.6,ptl:.6,pbr:2.2,plf:7,pspd:.6}},
+  {n:'Swarm',line:.08,ink:.05,parts:1,pull:.7,push:.5,style:{fx:3,pn:.8,psz:1.8,ptl:.6,pbr:1.5,plf:7,pspd:.6}},
   {n:'Ink',line:.35,ink:1.05,push:.6},
   {n:'Vortex',line:.3,ink:.3,vort:9,push:.3,style:{fx:4,pn:.55,psz:1.1,ptl:.85,pbr:.9,plf:4,pspd:1}},
   {n:'Obstacle',line:.5,ink:1.3,halo:1,current:28,push:.3,style:{fx:4,pn:.45,psz:1,ptl:.88,pbr:.8,plf:5,pspd:1}},
-  {n:'Magnet',line:.1,ink:.08,parts:1,pull:.6,scatter:.6,style:{fx:3,pn:1,psz:1.4,ptl:.8,pbr:2,plf:8,pspd:.5}},
+  {n:'Magnet',line:.1,ink:.08,parts:1,pull:.6,scatter:.6,style:{fx:3,pn:.8,psz:1.6,ptl:.78,pbr:1.5,plf:8,pspd:.5}},
 ];
 /* Drawing kit in unit coordinates. Every stroke is drawn twice: a wide faint halo and a crisp core. */
 function makeDrawer(x,size,lw){

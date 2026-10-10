@@ -42,7 +42,7 @@ UI={
     const sec={calm:'Calm',build:'Build-up',full:'Full'}[M.section.state]||'';
     const lock=M.conf>.55?'locked':M.conf>.25?'finding':'free';
     const src=M.native?'Phone audio':{mic:'Mic',desktop:'Tab audio',file:'File',stream:'Stream'}[audio.state]||'';
-    if(this.hudEl)this.hudEl.innerHTML=`<span><b>${fps}</b> fps <em>/ ${hz}</em></span><span>${Gov.label()}</span>`+
+    if(this.hudEl)this.hudEl.innerHTML=`<span><b>${fps}</b> fps <em>/ ${hz}</em></span><span>${Gov.label()}</span>`+(Tilt.src?`<span title="Tilt source">⟲ ${Tilt.src}</span>`:'')+
       (on?`<span class="bpm ${lock}"><i></i><b>${M.bpm?Math.round(M.bpm):'—'}</b> bpm</span><span>${sec}${M.drop>.3?' · <b>DROP</b>':''}</span><span>${src}</span>`:'<span class="dim">No music · Music tab → Listen to</span>');
     $('#fps').textContent=P.st?(on&&M.bpm?Math.round(M.bpm)+' bpm · ':'')+fps+' fps':'';
   },

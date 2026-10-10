@@ -43,13 +43,13 @@ function stepMorph(dt){
 let persistTimer=0;
 function persist(){clearTimeout(persistTimer);persistTimer=setTimeout(()=>{
   const p={},s={};for(const k of PRESET_KEYS)p[k]=P[k];for(const k of SYSTEM_KEYS)s[k]=P[k];
-  store.set('dynamic.state',{v:2,p,s,cur:allPresets()[current]?.n||'',hue:hueBase});
+  store.set('dynamic.state',{v:3,p,s,cur:allPresets()[current]?.n||'',hue:hueBase});
 },350)}
 function restore(){
   const st=store.get('dynamic.state',null);
   const i=allPresets().findIndex(x=>x.n===st?.cur);applyPreset(i>=0?i:0);
   if(!st)return;
-  if((st.v|0)<2){   // v2 retuned the shared look and moved most settings out of presets: keep only personal choices
+  if((st.v|0)<3){   // v2 retuned the shared look and moved most settings out of presets: keep only personal choices
     const keep=['rmode','rhi','rgain','padspd','ref','blr','dsp','bzl','st','uh','ud','cyc','msn'];
     for(const k of keep){const v=sanitize(k,st.s?.[k]??st.p?.[k]);if(v!==undefined)P[k]=v}return}
   for(const k in st.s){const v=sanitize(k,st.s[k]);if(v!==undefined)P[k]=v}

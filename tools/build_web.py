@@ -62,6 +62,13 @@ def build_pad():
     out.write_text(html, encoding='utf-8')
     print(f'Built {out.relative_to(ROOT)}: {len(html.encode()):,} bytes')
 
+def build_watch():
+    """Dynamic Lite: the Wear OS page (plain Canvas 2D, no shared engine)."""
+    src = (ROOT / 'web' / 'watch.html').read_text(encoding='utf-8')
+    (ROOT / 'docs' / 'watch.html').write_text(src, encoding='utf-8')
+    print(f'Built docs/watch.html: {len(src.encode()):,} bytes')
+
 if __name__ == '__main__':
     build()
     build_pad()
+    build_watch()

@@ -8,7 +8,7 @@ const App={
     Engine.init();Geo.init();restore();Engine.wrap=!!P.edges;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
-    UI.build();Input.init();Music.init();PadPlay.init();
+    UI.build();Input.init();Tilt.init();Music.init();PadPlay.init();
     Space.update(P,0,Engine.res,Engine.world,0);
     const bar=$('#boot i');
     const errors=await Engine.warm((n,total)=>{if(bar)bar.style.setProperty('--p',n/total)});
@@ -38,8 +38,9 @@ const App={
 
     const gq=Gov.begin();
     Music.frame(dt);
+    Tilt.frame(dt);const tl=Tilt.get(P);
     const E=Director.apply(P,dt),beat=Music.beat,energy=Music.energy;
-    Space.update(E,this.paused?0:dt,Engine.res,Engine.world,P.aspace*(energy*1.5+beat*2));
+    Space.update(E,this.paused?0:dt,Engine.res,Engine.world,P.aspace*(energy*1.5+beat*2),tl);
     PadPlay.frame(dt);
     Input.frame(dt);
     UI.depositStep();
@@ -47,12 +48,13 @@ const App={
 
     const L=this.look;
     this.displayHue+=P.hdrift*dt*.6;
+    E.lgt=P.lgt+tl[0]*55-tl[1]*30;   // relief light follows the tilt, like holding it to a lamp
     this.displayHue+=(E.hdrift-P.hdrift)*dt*.6;
     L.exposure=P.glw*Exposure.k*(1+P.aglow*beat*.3);L.hue=this.displayHue+(E.h-hueBase)*TAU;L.bloom=E.bloom*(1+P.aglow*(beat*1.2+energy*.6));
-    L.echoZoom=E.ezoom*.012*dt*60*(1+P.aspace*beat);L.echoTwist=E.etwist*.02*dt*60;L.time=clock;
+    L.echoZoom=E.ezoom*.012*dt*60*(1+P.aspace*beat);L.echoTwist=E.etwist*.02*dt*60;L.echoCenter=[tl[0]*.1,tl[1]*.1];L.time=clock;
     if(!this.paused){
       const sim=dt*P.ts*musicSpeed,n=Math.min(3,Math.ceil(sim/(1/60)-1e-6)),h=sim/Math.max(n,1);
-      const g=[P.wx,P.wy];
+      const pr=Tilt.pour(P),g=[P.wx+pr[0],P.wy+pr[1]];
       const field={mode:E.field|0,str:E.fs*500*(1+P.afield*(Music.bass*2.5+beat)),g,time:clock};
       Geo.inject(dt,E);
       for(let i=0;i<n;i++)Engine.step(h,E,field);

@@ -11,6 +11,10 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -69,6 +73,18 @@ open class MainActivity : Activity() {
     private var pageReady = false
 
     private val spotifyListener: (SpotifyState) -> Unit = { s -> main.post { pushSpotify(s) } }
+
+    /** Tilt: the accelerometer, pushed into the page at ~40 Hz (window.__nativeTilt in 72_tilt.js). */
+    private var tiltT = 0L
+    private val tiltListener = object : SensorEventListener {
+        override fun onSensorChanged(e: SensorEvent) {
+            val ms = e.timestamp / 1_000_000L
+            if (ms - tiltT < 25 || !pageReady) return
+            tiltT = ms
+            web.evaluateJavascript("window.__nativeTilt&&window.__nativeTilt(${e.values[0]},${e.values[1]},${e.values[2]})", null)
+        }
+        override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -156,10 +172,14 @@ open class MainActivity : Activity() {
         web.onResume()
         NowPlayingService.listeners.add(spotifyListener)
         pushSpotify(NowPlayingService.latest)
+        if (page == "index.html") (getSystemService(Context.SENSOR_SERVICE) as SensorManager).let { sm ->
+            sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sm.registerListener(tiltListener, it, SensorManager.SENSOR_DELAY_GAME) }
+        }
     }
 
     override fun onPause() {
         NowPlayingService.listeners.remove(spotifyListener)
+        (getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(tiltListener)
         web.onPause()
         super.onPause()
     }
