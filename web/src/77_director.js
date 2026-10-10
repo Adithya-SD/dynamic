@@ -48,6 +48,7 @@ const Director={
     E.abeat=P.abeat*(1+d*(drop*1.5+inten*.5));
     E.zp=d*(.05*pulse+.05*kick+.07*drop+.03*this.flash);   // the whole frame swells on every hit
     E.gpulse=Math.min(1,P.gpulse*(1+d*.8));
+    E.eopen=Math.min(1,P.eopen+d*.15*drop);   // eyes open wide on a drop
     // Intricacy follows the music: busier, denser songs fold into more mirrors, nest the pattern and multiply strokes.
     const cx=M.complexity*d;this.cx=cx;
     if(E.space===1){   // busier music, more mirrors: but only a step every few seconds, each one announced by a transition

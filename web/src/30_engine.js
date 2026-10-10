@@ -126,7 +126,7 @@ const Engine={
   /* Display: compose (fold once) → material → echo → bloom → final (glass, film). */
   render(P,look,glass,toScreen=true,out=null){
     const res=this.res,sp=Space.u;
-    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.08,uVib:P.vib,uTone:P.tone,uOrbL:look.orbL||[.4,.5,.75],uOrbRim:look.orbRim||[.3,.5,1],uOrbDepth:P.odepth,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
+    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.08,uVib:P.vib,uTone:P.tone,...(look.eyes||Eyes.off),uOrbL:look.orbL||[.4,.5,.75],uOrbRim:look.orbRim||[.3,.5,1],uOrbDepth:P.odepth,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
     let base=this.scene;
     if(P.rel>0||P.met>0||P.irs>0||P.fre>0){pass('material.frag',{uScene:this.scene,uTx:[1/res[0],1/res[1]],uRelief:P.rel,uSharp:P.spc,uLight:P.lgt*Math.PI/180,uMetal:P.met,uIris:P.irs,uRim:P.fre,uShine:0},this.lit);base=this.lit}
     if(P.echo>0){

@@ -7,9 +7,15 @@
      "share" bar, and starts by itself;
    - no distractions: borderless full screen, no menus, display kept awake, cursor hides when idle. */
 const {app, BrowserWindow, session, desktopCapturer, protocol, net, powerSaveBlocker, ipcMain, Menu} = require('electron');
-const path = require('path'), os = require('os'), {execFileSync} = require('child_process'), {pathToFileURL} = require('url');
+const path = require('path'), os = require('os'), fs = require('fs'), {execFileSync} = require('child_process'), {pathToFileURL} = require('url');
 
-const ROOT = path.join(__dirname, 'app');
+/* The page comes from a "live" folder next to the program when there is one (tools/build_all.ps1 keeps it current), and
+   otherwise from the copy packed inside. While the app is open, a new build in the live folder reloads the page by itself:
+   updating the Windows app is a file copy, not a repackage. */
+const BUNDLED = path.join(__dirname, 'app');
+const LIVE = process.env.DYNAMIC_LIVE || path.join(path.dirname(process.execPath), '..', '..', 'live');
+const liveIndex = path.join(LIVE, 'index.html');
+const root = () => (fs.existsSync(liveIndex) ? LIVE : BUNDLED);
 
 // ---- GPU and scheduling: decided before the app is ready ----
 const SWITCHES = [['force_high_performance_gpu'], ['ignore-gpu-blocklist'], ['enable-gpu-rasterization'], ['enable-zero-copy'],
@@ -49,8 +55,8 @@ app.whenReady().then(() => {
     const u = new URL(req.url);
     let p = decodeURIComponent(u.pathname);
     if (p === '/' || !p) p = '/index.html';
-    const file = path.normalize(path.join(ROOT, p));
-    if (!file.startsWith(ROOT)) return new Response('', {status: 403});
+    const base = path.normalize(root()), file = path.normalize(path.join(base, p));
+    if (!file.startsWith(base)) return new Response('', {status: 403});
     return net.fetch(pathToFileURL(file).toString());
   });
 
@@ -94,6 +100,9 @@ app.whenReady().then(() => {
     }, 9000);
   }
   win.loadURL('dynamic://app/index.html');
+  // A new build appeared in the live folder: reload (the page restarts, system audio is picked up again).
+  let reloadT = 0;
+  try { fs.watchFile(liveIndex, {interval: 1500}, (cur, prev) => { if (cur.mtimeMs !== prev.mtimeMs && cur.size > 0) { clearTimeout(reloadT); reloadT = setTimeout(() => { if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache(); }, 800); } }); } catch (e) { /* no live folder */ }
   blocker = powerSaveBlocker.start('prevent-display-sleep');
 
   ipcMain.handle('fullscreen', () => { win.setFullScreen(!win.isFullScreen()); return win.isFullScreen(); });

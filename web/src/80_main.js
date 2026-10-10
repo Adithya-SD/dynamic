@@ -8,7 +8,7 @@ const App={
     Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||P.cvs);this.cvsSeen=P.cvs|0;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
-    UI.build();Input.init();Tilt.init();Music.init();PadPlay.init();if(WATCH)Watch.init();
+    UI.build();Input.init();Tilt.init();Eyes.init();Music.init();PadPlay.init();if(WATCH)Watch.init();
     Space.update(P,0,Engine.res,Engine.world,0);
     const bar=$('#boot i');
     const errors=await Engine.warm((n,total)=>{if(bar)bar.style.setProperty('--p',n/total)});
@@ -56,6 +56,7 @@ const App={
     this.displayHue+=P.hdrift*dt*.6;
     E.lgt=P.lgt+tl[0]*55-tl[1]*30;   // relief light follows the tilt, like holding it to a lamp
     this.displayHue+=(E.hdrift-P.hdrift)*dt*.6;
+    Eyes.frame(dt,E);L.eyes=Eyes.uniforms(E);
     L.exposure=P.glw*Exposure.k*(1+P.aglow*(beat*.35+Music.kick*.2+Director.flash*.3));L.hue=this.displayHue+(E.h-hueBase)*TAU;L.bloom=E.bloom*(1+P.aglow*(beat*1.6+energy*.6));
     {const a=E.lgt*Math.PI/180;L.orbL=[Math.cos(a)*.7,Math.sin(a)*.7,.75];L.orbRim=paletteRGB(hueBase+E.hr*.35).map(z=>z*.6)}
     L.echoZoom=E.ezoom*.012*dt*60*(1+P.aspace*beat);L.echoTwist=E.etwist*.02*dt*60;L.echoCenter=[tl[0]*.1,tl[1]*.1];L.time=clock;

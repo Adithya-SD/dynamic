@@ -273,6 +273,7 @@ UI={
       const q=el('button','ch');q.textContent='Quit (Ctrl+Q)';q.onclick=()=>PCAPP.quit();row3.append(fsb,top,q);
       PCAPP.info().then(i=>{if(i&&i.gpu){const p=el('p','help extra');p.textContent='Graphics: '+i.gpu;panel.append(p)}}).catch(()=>{});
     }
+    const ver=el('p','help extra');ver.textContent='Dynamic · build '+BUILD.id+' · '+BUILD.t+(PCAPP?' · Windows app '+PCAPP.version:NATIVE?' · Android app':'');panel.append(ver);
     this.diag=el('p','help extra');panel.append(this.diag);
   },
 

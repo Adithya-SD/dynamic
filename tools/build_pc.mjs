@@ -13,13 +13,6 @@ mkdirSync(tmp, {recursive: true});
 const env = {...process.env, TEMP: tmp, TMP: tmp, TMPDIR: tmp, npm_config_cache: join(work, 'npm-cache'), ELECTRON_CACHE: join(work, 'electron-cache'), electron_config_cache: join(work, 'electron-cache')};
 const run = (cmd, cwd = work) => execSync(cmd, {cwd, env, stdio: 'inherit'});
 
-// Windows will not let the packager replace a program that is running.
-try {
-  if (execSync('tasklist /FI "IMAGENAME eq Dynamic.exe" /NH', {encoding: 'utf8'}).includes('Dynamic.exe')) {
-    console.log('Dynamic PC is running: close it, then run this again to update it. (Nothing was changed.)');
-    process.exit(0);
-  }
-} catch (e) { /* tasklist unavailable: carry on */ }
 mkdirSync(work, {recursive: true});
 if (!existsSync(join(work, 'node_modules', 'electron'))) {
   writeFileSync(join(work, 'package.json'), JSON.stringify({name: 'dynamic-pc-build', private: true, version: '1.0.0'}));
@@ -36,7 +29,8 @@ for (const f of readdirSync(join(root, 'docs'))) {
   if (/^(index\.html|manifest\.webmanifest|icon-\d+\.png)$/.test(f)) cpSync(join(root, 'docs', f), join(stage, 'app', f));
 }
 
-const out = join(work, 'out');
+// Built into out-next: a running app keeps its files; start.cmd (the Desktop shortcut) swaps the new one in at the next launch.
+const out = join(work, 'out-next');
 rmSync(out, {recursive: true, force: true});
 const icon = existsSync(join(stage, 'icon.ico')) ? ` --icon="${join(stage, 'icon.ico')}"` : '';
 run(`npx @electron/packager "${stage}" Dynamic --platform=win32 --arch=x64 --out="${out}" --overwrite --prune=false --electron-version=44.7.0 --download.cacheRoot="${join(work, 'electron-cache')}"${icon}`);
