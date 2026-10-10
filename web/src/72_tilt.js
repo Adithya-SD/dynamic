@@ -8,7 +8,7 @@ const Tilt={
     // Phone: orientation relative to how you are holding it; the neutral pose slowly follows your grip.
     addEventListener('deviceorientation',e=>this.feed(e.gamma,e.beta),true);
     // Android shell: the accelerometer is read natively and pushed in (a file:// page may not get orientation events).
-    if(NATIVE)window.__nativeTilt=(ax,ay,az)=>{const g=Math.hypot(ax,ay,az)||1;this.feed(Math.asin(clamp(-ax/g,-1,1))*57.2958,90-Math.atan2(az,ay)*57.2958)};
+    if(NATIVE||WATCH)window.__nativeTilt=(ax,ay,az)=>{const g=Math.hypot(ax,ay,az)||1;this.feed(Math.asin(clamp(-ax/g,-1,1))*57.2958,90-Math.atan2(az,ay)*57.2958)};
     // iOS asks for permission once, from a tap.
     const D=window.DeviceOrientationEvent;
     if(D&&typeof D.requestPermission==='function')addEventListener('pointerdown',()=>{D.requestPermission().catch(()=>{})},{once:true,capture:true});

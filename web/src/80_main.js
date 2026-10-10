@@ -8,7 +8,7 @@ const App={
     Engine.init();Geo.init();restore();Engine.wrap=!!P.edges;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
-    UI.build();Input.init();Tilt.init();Music.init();PadPlay.init();
+    UI.build();Input.init();Tilt.init();Music.init();PadPlay.init();if(WATCH)Watch.init();
     Space.update(P,0,Engine.res,Engine.world,0);
     const bar=$('#boot i');
     const errors=await Engine.warm((n,total)=>{if(bar)bar.style.setProperty('--p',n/total)});

@@ -1,6 +1,7 @@
 /* WebGL2 host: programs, render targets and reflected uniform setters. The C++ host mirrors this. */
 const cv=$('#cv');
 const gl=cv.getContext('webgl2',{alpha:false,antialias:false,depth:false,stencil:false,premultipliedAlpha:false,preserveDrawingBuffer:false,powerPreference:'high-performance',desynchronized:true});
+if(!gl&&WATCH){location.replace('watch.html');throw Error('WebGL2 unavailable: opening Dynamic Lite')}
 if(!gl){document.body.innerHTML='<p style="padding:40px;font:16px system-ui;color:#fff">Dynamic needs WebGL2. Update your browser or enable hardware acceleration.</p>';throw Error('WebGL2 unavailable')}
 const floatTargets=!!gl.getExtension('EXT_color_buffer_float');
 gl.getExtension('EXT_color_buffer_half_float');gl.getExtension('EXT_float_blend');

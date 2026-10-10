@@ -93,6 +93,9 @@ textarea{resize:vertical;margin:0 0 10px;font-family:ui-monospace,monospace;font
 #boot.out{opacity:0;pointer-events:none}#boot b{font:650 22px var(--f);letter-spacing:.4px}#boot p{margin:0;font-size:13px;color:#fff8}
 #boot i{display:block;width:150px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;--p:.08}#boot i:after{content:"";display:block;height:100%;background:#fff;transform-origin:0 50%;transform:scaleX(var(--p));transition:transform .3s}
 @media(prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
+.watch #ttl,.watch #sh,.watch #dock,.watch #dlg{display:none!important}
+.watch #note{top:auto;bottom:15%;max-width:70vw;padding:8px 14px;font-size:12px}
+.watch #boot b{font-size:20px}
 </style></head><body>
 <canvas id="cv"></canvas>
 <div id="boot"><b>Dynamic</b><i></i><p>Compiling shaders. First launch only.</p></div>

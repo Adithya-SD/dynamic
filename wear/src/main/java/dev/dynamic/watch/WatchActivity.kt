@@ -17,8 +17,9 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 
 /**
- * Dynamic Lite for Wear OS: the watch.html page in a WebView, plus the accelerometer (so a wrist tilt moves the picture)
- * and the microphone permission. Rotary input is forwarded to the page as wheel events.
+ * Dynamic for Wear OS: the full engine (index.html?watch) in a WebView, plus the accelerometer (a wrist tilt moves the
+ * picture) and the microphone permission. Rotary input is forwarded to the page as wheel events. If the watch has no
+ * WebGL2 the page opens watch.html (Dynamic Lite) instead.
  */
 class WatchActivity : Activity() {
     private lateinit var web: WebView
@@ -67,7 +68,7 @@ class WatchActivity : Activity() {
             override fun onPageFinished(v: WebView, url: String) { ready = true }
         }
         setContentView(web)
-        web.loadUrl("file:///android_asset/watch.html")
+        web.loadUrl("file:///android_asset/index.html?watch")
     }
 
     override fun onRequestPermissionsResult(code: Int, p: Array<out String>, g: IntArray) {

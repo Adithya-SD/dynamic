@@ -93,6 +93,9 @@ textarea{resize:vertical;margin:0 0 10px;font-family:ui-monospace,monospace;font
 #boot.out{opacity:0;pointer-events:none}#boot b{font:650 22px var(--f);letter-spacing:.4px}#boot p{margin:0;font-size:13px;color:#fff8}
 #boot i{display:block;width:150px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;--p:.08}#boot i:after{content:"";display:block;height:100%;background:#fff;transform-origin:0 50%;transform:scaleX(var(--p));transition:transform .3s}
 @media(prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
+.watch #ttl,.watch #sh,.watch #dock,.watch #dlg{display:none!important}
+.watch #note{top:auto;bottom:15%;max-width:70vw;padding:8px 14px;font-size:12px}
+.watch #boot b{font-size:20px}
 </style></head><body>
 <canvas id="cv"></canvas>
 <div id="boot"><b>Dynamic</b><i></i><p>Compiling shaders. First launch only.</p></div>
@@ -124,6 +127,8 @@ const store={
 function hsv(h,s,v){h=fract(h)*6;const i=h|0,f=h-i,p=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));return[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i%6]}
 const NATIVE=window.DynamicNative||null;   // set by the Android shell; absent in a normal browser
 if(NATIVE)document.documentElement.classList.add('native');
+const WATCH=/[?&]watch/.test(location.search);   // Wear OS: the same engine without the settings sheet
+if(WATCH)document.documentElement.classList.add('watch');
 const haptic=ms=>{try{NATIVE?NATIVE.haptic(ms):navigator.vibrate&&navigator.vibrate(ms)}catch{}};
 async function download(blob,name){
   if(NATIVE){   // WebView cannot follow blob: downloads, so stream the file to the shell in 768 KB chunks
@@ -142,6 +147,7 @@ var UI=null;
 /* WebGL2 host: programs, render targets and reflected uniform setters. The C++ host mirrors this. */
 const cv=$('#cv');
 const gl=cv.getContext('webgl2',{alpha:false,antialias:false,depth:false,stencil:false,premultipliedAlpha:false,preserveDrawingBuffer:false,powerPreference:'high-performance',desynchronized:true});
+if(!gl&&WATCH){location.replace('watch.html');throw Error('WebGL2 unavailable: opening Dynamic Lite')}
 if(!gl){document.body.innerHTML='<p style="padding:40px;font:16px system-ui;color:#fff">Dynamic needs WebGL2. Update your browser or enable hardware acceleration.</p>';throw Error('WebGL2 unavailable')}
 const floatTargets=!!gl.getExtension('EXT_color_buffer_float');
 gl.getExtension('EXT_color_buffer_half_float');gl.getExtension('EXT_float_blend');
@@ -2327,7 +2333,7 @@ const Tilt={
     // Phone: orientation relative to how you are holding it; the neutral pose slowly follows your grip.
     addEventListener('deviceorientation',e=>this.feed(e.gamma,e.beta),true);
     // Android shell: the accelerometer is read natively and pushed in (a file:// page may not get orientation events).
-    if(NATIVE)window.__nativeTilt=(ax,ay,az)=>{const g=Math.hypot(ax,ay,az)||1;this.feed(Math.asin(clamp(-ax/g,-1,1))*57.2958,90-Math.atan2(az,ay)*57.2958)};
+    if(NATIVE||WATCH)window.__nativeTilt=(ax,ay,az)=>{const g=Math.hypot(ax,ay,az)||1;this.feed(Math.asin(clamp(-ax/g,-1,1))*57.2958,90-Math.atan2(az,ay)*57.2958)};
     // iOS asks for permission once, from a tap.
     const D=window.DeviceOrientationEvent;
     if(D&&typeof D.requestPermission==='function')addEventListener('pointerdown',()=>{D.requestPermission().catch(()=>{})},{once:true,capture:true});
@@ -2552,6 +2558,34 @@ const Exposure={
   reset(){this.k=1}
 };
 
+/* Wear OS: the whole engine on a small round screen, without the settings sheet (index.html?watch).
+   Drag draws. Crown / bezel (wheel) or double-tap: next preset. Two-finger tap: next palette. Hold: microphone (beat
+   sync, Director and drops all work from it). Tilt your wrist to look around in 3D. Light quality, 30 fps. */
+const Watch={
+  mic:false,
+  init(){
+    // First run: light quality, half-rate frames, no interface effects, a bit more wrist pour.
+    if(!store.get('dynamic.watchinit',0)){store.set('dynamic.watchinit',1);P.qual=4;P.uh=0;P.st=0;P.tflow=.5;persist();const i=allPresets().findIndex(x=>x.n==='Infinity');if(i>=0)applyPreset(i)}
+    Gov.cap=30;
+    const show=()=>notice(allPresets()[current].n,1300);
+    let wt=0;addEventListener('wheel',e=>{const n=performance.now();if(n-wt<180)return;wt=n;UI.cycle(e.deltaY>0?1:-1);show()},{passive:true});
+    let lastUp=0,down=0,x0=0,y0=0,moved=false,hold=0,touches=0;
+    cv.addEventListener('pointerdown',e=>{touches++;x0=e.clientX;y0=e.clientY;moved=false;down=performance.now();
+      if(touches===2){UI.change('pal',(P.pal+1)%SCHEMA.palettes.length);notice(SCHEMA.palettes[P.pal][0],900)}
+      clearTimeout(hold);hold=setTimeout(()=>{if(!moved&&touches===1)this.toggleMic()},900)});
+    cv.addEventListener('pointermove',e=>{if(Math.hypot(e.clientX-x0,e.clientY-y0)>12)moved=true});
+    const up=e=>{touches=Math.max(0,touches-1);clearTimeout(hold);const n=performance.now();
+      if(!moved&&n-down<350){if(n-lastUp<320){UI.cycle(1);show();lastUp=0}else lastUp=n}};
+    cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',()=>{touches=Math.max(0,touches-1);clearTimeout(hold)});
+  },
+  async toggleMic(){
+    try{
+      if(this.mic){await audio.stop();this.mic=false;notice('Mic off',900);return}
+      await audio.select('mic');this.mic=true;notice('Listening',1100);haptic(30);
+    }catch(e){notice(e.message||'No microphone',2200)}
+  }
+};
+
 /* Frame loop. Order matches the Android host: input → stamps → solve → particles → display. */
 const App={
   paused:false,snap:false,rec:null,displayHue:0,look:{exposure:1,hue:0,bloom:0,echoZoom:0,echoTwist:0,time:0},
@@ -2562,7 +2596,7 @@ const App={
     Engine.init();Geo.init();restore();Engine.wrap=!!P.edges;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
-    UI.build();Input.init();Tilt.init();Music.init();PadPlay.init();
+    UI.build();Input.init();Tilt.init();Music.init();PadPlay.init();if(WATCH)Watch.init();
     Space.update(P,0,Engine.res,Engine.world,0);
     const bar=$('#boot i');
     const errors=await Engine.warm((n,total)=>{if(bar)bar.style.setProperty('--p',n/total)});

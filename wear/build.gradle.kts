@@ -13,12 +13,12 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildTypes { release { isMinifyEnabled = false } }
-    // Only the watch page is bundled (docs/watch.html, written by tools/build_web.py).
+    // The engine (docs/index.html, opened with ?watch) and its fallback Dynamic Lite (docs/watch.html).
     sourceSets { getByName("main") { assets.srcDir(layout.buildDirectory.dir("watchAssets")) } }
 }
 
 val copyWatch = tasks.register<Copy>("copyWatch") {
-    from(rootProject.file("docs/watch.html"))
+    from(rootProject.file("docs/index.html"), rootProject.file("docs/watch.html"))
     into(layout.buildDirectory.dir("watchAssets"))
 }
 tasks.named("preBuild") { dependsOn(copyWatch) }
