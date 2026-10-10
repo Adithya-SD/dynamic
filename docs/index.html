@@ -2707,7 +2707,7 @@ const Tilt={
     if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',re);else addEventListener('orientationchange',re);
     // Computer: the mouse over the picture.
     cv.addEventListener('pointermove',e=>{
-      if(e.pointerType!=='mouse'||e.buttons)return;   // hovering only: dragging is for drawing
+      if(e.pointerType!=='mouse')return;   // the mouse tilts the picture while hovering AND while drawing (a phone uses its gyro)
       const mx=clamp((e.clientX/VW()-.5)*2,-1,1),my=clamp((e.clientY/VH()-.5)*2,-1,1);
       this.t=[my*1.25,mx*1.25,0];this.src='mouse';this.seen=performance.now();this.hover=true;this.away=false;
     });
