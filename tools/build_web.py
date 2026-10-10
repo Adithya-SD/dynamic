@@ -78,7 +78,27 @@ def build_watch():
     (ROOT / 'docs' / 'watch.html').write_text(src, encoding='utf-8')
     print(f'Built docs/watch.html: {len(src.encode()):,} bytes')
 
+WATCH_MODULES = ['watch/prelude.js', 'src/00_util.js', 'watch/gl.js', 'src/20_space.js', 'src/30_engine.js', 'src/40_audio.js', 'src/42_beat.js', 'src/46_pad.js',
+                 'src/50_state.js', 'src/56_geo.js', 'src/58_eyes.js', 'src/65_random.js', 'src/70_input.js', 'src/72_tilt.js', 'src/76_trans.js',
+                 'src/77_director.js', 'src/78_perf.js', 'watch/app.js']
+
+def build_watch_engine():
+    """Dynamic for Wear OS runs natively (no WebView on many watches): the same engine modules, shaders, presets and palettes as the
+    web build, as one script that QuickJS plays inside the app (wear/src/main/cpp). watch/ holds the thin browser stand-in."""
+    nl = chr(10)
+    compact = lambda obj: json.dumps(obj, separators=(',', ':'))
+    data = nl.join(['const SHADERS=' + compact(shaders()) + ';',
+                    'const SCHEMA=' + compact(json.loads((ROOT / 'shared' / 'params.json').read_text(encoding='utf-8'))) + ';',
+                    'const PRESETS=' + compact(json.loads((ROOT / 'shared' / 'presets.json').read_text(encoding='utf-8'))) + ';',
+                    'const BUILD=' + compact(build_id()) + ';', ''])
+    js = nl.join((ROOT / 'web' / f).read_text(encoding='utf-8') for f in WATCH_MODULES)
+    out = ROOT / 'wear' / 'build' / 'watchAssets' / 'engine.js'
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(data + js, encoding='utf-8')
+    print(f'Built wear/build/watchAssets/engine.js: {len((data + js).encode()):,} bytes')
+
 if __name__ == '__main__':
     build()
     build_pad()
     build_watch()
+    build_watch_engine()

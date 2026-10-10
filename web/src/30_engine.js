@@ -3,6 +3,8 @@
    simulation detail sharpens the fluid without changing how it moves. */
 /* Ink lingers: every fade (dissolve and the slow linear fade) runs at this share of the preset's value. */
 const FADE=.65;
+/* Overall pace of the picture, in every preset: everything moves at this share of the speed it was designed at. */
+const PACE=.8;
 const REF=128,MAX_VEL=1500,PART_SIDE=256;
 const Engine={
   vel:null,prs:null,div:null,crl:null,dye:null,fwd:null,

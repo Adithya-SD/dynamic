@@ -7,6 +7,7 @@
 # What happens:
 #   1. python tools/build_web.py       docs/index.html (+ pad, watch). Every build carries an id (git hash + time) shown in System.
 #   2. node tools/check.mjs            headless desktop / phone / watch boot, every tab, presets, random, eyes, canvases. Stops on any error.
+#      node tools/watch_smoke.mjs      the native watch engine bundle (wear engine.js, written by build_web.py) against a mock OpenGL ES bridge.
 #   3. Desktop copies                  Dynamic.html, Dynamic Pad.html, Dynamic Lite (watch).html
 #   4. Windows "live" folder           the page is copied to D:\CodexBuild\DynamicPC\live; an open Dynamic PC reloads itself in ~2 s.
 #      The Electron shell is repackaged only when pc/ changed (a hash tells), so most updates take no repackaging at all.
@@ -29,7 +30,8 @@ try {
   python tools/build_web.py | Out-Null
   $build = (Select-String -Path docs\index.html -Pattern 'const BUILD=(\{[^}]*\})' -List | ForEach-Object { $_.Matches[0].Groups[1].Value })
   Lap 'web' $build
-  if (-not $NoCheck) { node tools/check.mjs; if ($LASTEXITCODE -ne 0) { throw 'Smoke test failed: nothing was shipped.' }; Lap 'check' 'desktop, phone, watch' }
+  if (-not $NoCheck) { node tools/check.mjs; if ($LASTEXITCODE -ne 0) { throw 'Smoke test failed: nothing was shipped.' }
+    node tools/watch_smoke.mjs | Select-Object -Last 2; if ($LASTEXITCODE -ne 0) { throw 'Watch engine smoke test failed: nothing was shipped.' }; Lap 'check' 'desktop, phone, watch layout, native watch engine' }
   Copy-Item docs\index.html "$desk\Dynamic.html" -Force; Copy-Item docs\pad.html "$desk\Dynamic Pad.html" -Force; Copy-Item docs\watch.html "$desk\Dynamic Lite (watch).html" -Force
   New-Item -ItemType Directory -Force "$pcWork\live" | Out-Null
   foreach ($f in 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png') { Copy-Item "docs\$f" "$pcWork\live\$f" -Force }

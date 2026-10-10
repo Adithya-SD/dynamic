@@ -1,0 +1,1 @@
+quickjs-ng v0.16.2 (MIT), https://github.com/quickjs-ng/quickjs, tag commit 1ab8676f4b6d6d669baeb5f21790fb9734636a20

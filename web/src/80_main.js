@@ -1,6 +1,4 @@
 /* Frame loop. Order matches the Android host: input → stamps → solve → particles → display. */
-/* Overall pace of the picture, in every preset: everything moves at this share of the speed it was designed at. */
-const PACE=.8;
 const App={
   paused:false,snap:false,rec:null,displayHue:0,look:{exposure:1,hue:0,bloom:0,echoZoom:0,echoTwist:0,time:0},
   last:performance.now(),frames:0,fpsT:0,fps:0,cpu:0,diagT:0,

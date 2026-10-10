@@ -46,6 +46,8 @@ const Gov={
   label(){const n=['Ultra','High','High−','Balanced','Light','Battery'][this.lvl()];return this.auto()?'Auto · '+n:n}
 };
 
+function quality(){const q={};for(const k of QUALITY_KEYS)q[k]=P[k];return Gov.quality(q)}
+
 const Exposure={
   k:1,t:0,pbo:null,fence:null,tiny:null,px:new Uint8Array(16*16*4),bp:0,bpS:0,
   /* Called after the frame is drawn (scene holds the composed, tone-mapped frame). */
