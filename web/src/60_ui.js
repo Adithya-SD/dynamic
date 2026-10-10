@@ -13,19 +13,24 @@ UI={
     });
     this.buildPresets(this.panels[0]);
     for(const[i,[id,label]]of SCHEMA.tabs.entries()){if(i===0)continue;
-      const panel=this.panels[i];
+      const panel=this.panels[i];panel.style.setProperty('--ac',ACCENT[id]||'#fff');
+      if(id==='quick'){this.buildQuick(panel);continue}
       if(id==='music')this.buildMusicHead(panel);
-      let group='';
+      let group='',G=null;
       for(const d of SCHEMA.params){if(d.tab!==id||d.hide)continue;
-        if(d.g!==group){group=d.g;const h=el('h4');h.textContent=group;h.dataset.group=group;panel.append(h)}
+        if(d.g!==group){this.closeGroup(G,panel);group=d.g;G=this.openGroup(panel,group,id)}
         const row=d.t==='g'?this.geoPicker(d):d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):d.t==='p'?this.palette(d):this.slider(d);
-        row.dataset.s=(d.l+' '+d.g+' '+label+' '+d.k+' '+(d.o||[]).join(' ')).toLowerCase();row.dataset.g=d.g;panel.append(row);this.rows.push(row);
-        if(d.help){const p=el('p','help');p.textContent=d.help;row.append(p)}
+        row.dataset.s=(d.l+' '+d.g+' '+label+' '+d.k+' '+(d.help||'')+' '+(d.o||[]).join(' ')).toLowerCase();row.dataset.g=d.g;row.dataset.k=d.k;
+        const bc=el('small','bc');bc.textContent=label+' › '+d.g;row.prepend(bc);
+        panel.append(row);this.rows.push(row);G.keys.push(d.k);if(d.when)G.locked.push(d);
+        if(d.help){const p=el('p','help hint');p.textContent=d.help;row.append(p);const ib=el('button','ib','i');ib.type='button';ib.setAttribute('aria-label','What is '+d.l+'?');ib.onclick=e=>{e.stopPropagation();row.classList.toggle('hl')};row.append(ib)}   // help hides behind an (i)
       }
+      this.closeGroup(G,panel);
       if(id==='music')this.buildSpotify(panel);
       if(id==='system')this.buildSystem(panel);
     }
     this.buildDock();
+    const td=el('div');td.id='tabdesc';$('#sh').insertBefore(td,$('#find'));this.buildChangedChip();
     this.hudEl=el('div');this.hudEl.id='hud';$('#sh').insertBefore(this.hudEl,$('#tabs'));this.hudEl.addEventListener('click',e=>{if(e.target.closest('.tc')){Tilt.reset();notice('Tilt neutral set to how you hold it now.',1800)}});
     $('#q').addEventListener('input',()=>this.search());
     $('#q').addEventListener('keydown',e=>{if(e.key==='Escape'){$('#q').value='';this.search()}});
@@ -52,10 +57,14 @@ UI={
   /* ---------- controls ---------- */
   slider(d){
     const row=el('div','sl'),dec=d.st<1?Math.ceil(-Math.log10(d.st)-1e-9):0;
-    row.innerHTML=`<span><label>${d.l}<i class="dot"></i></label><em></em></span><div class="tr" role="slider" tabindex="0" aria-label="${d.l}" aria-valuemin="${d.min}" aria-valuemax="${d.max}"><i class="fl"></i><b class="kn"></b></div>`;
-    const tr=row.querySelector('.tr'),kn=row.querySelector('.kn'),em=row.querySelector('em'),k=d.k;
-    const fmt=v=>(+v).toFixed(dec)+(d.u||'');
-    const ui=()=>{tr.style.setProperty('--q',(P[k]-d.min)/(d.max-d.min));em.textContent=fmt(P[k]);tr.setAttribute('aria-valuenow',P[k]);row.classList.toggle('chg',Math.abs(P[k]-B[k])>1e-6);
+    const mk=MUSIC_LINKED[d.k];
+    row.innerHTML=`<span><label>${d.l}<i class="dot"></i>${mk?`<i class="mk" title="The music moves this on ${mk}">♪</i>`:''}</label><em></em></span><div class="tr" role="slider" tabindex="0" aria-label="${d.l}" aria-valuemin="${d.min}" aria-valuemax="${d.max}"><i class="df"></i><i class="fl"></i><b class="kn"></b></div>`+(d.ends?`<small class="ends"><span>${d.ends[0]}</span><span>${d.ends[1]}</span></small>`:'');
+    if(d.dial)row.classList.add('dial');
+    const tr=row.querySelector('.tr'),kn=row.querySelector('.kn'),em=row.querySelector('em'),fl=row.querySelector('.fl'),k=d.k;
+    const fmt=d.fmt||(v=>(+v).toFixed(dec)+(d.u||''));
+    const ui=()=>{tr.style.setProperty('--b',clamp((B[k]-d.min)/(d.max-d.min),0,1));tr.style.setProperty('--q',(P[k]-d.min)/(d.max-d.min));em.textContent=fmt(P[k]);tr.setAttribute('aria-valuenow',P[k]);
+      if(d.dial){const q=(P[k]-d.min)/(d.max-d.min);fl.style.left=`calc(14px + (100% - 28px)*${Math.min(q,.5)})`;fl.style.width=`calc((100% - 28px)*${Math.abs(q-.5)})`}   // a dial fills from its middle
+      row.classList.toggle('chg',Math.abs(P[k]-B[k])>1e-6);
       if(d.track){const c=this.trackColors(d.track);tr.style.setProperty('--tk',c[0]);tr.style.setProperty('--fc','transparent');tr.style.setProperty('--kc',c[1])}};
     const set=v=>{v=clamp(Math.round((v-d.min)/d.st)*d.st+d.min,d.min,d.max);v=+v.toFixed(6);if(v!==P[k]){this.change(k,v)}};
     const fromX=x=>{const r=tr.getBoundingClientRect();return d.min+clamp((x-r.left-14)/Math.max(1,r.width-28),0,1)*(d.max-d.min)};
@@ -127,7 +136,9 @@ UI={
     return[`linear-gradient(90deg,${hl(P.h,0)},${hl(P.h,1)})`,hl(P.h,P.s)];
   },
   change(k,v){
-    const old=P[k];P[k]=v;morph=null;
+    morph=null;if(PDEF[k].virtual){Quick.apply(k,v);this.sync();return}
+    Quick.touch(k);
+    const old=P[k];P[k]=v;
     if(PDEF[k].quality){if(!Engine.allocate(quality())){P[k]=old;notice(Engine.error)}}
     if(k==='edges')Engine.setWrap(!!(v||P.cvs));
     persist();this.sync();
@@ -136,16 +147,16 @@ UI={
 
   /* ---------- search: every setting in every tab ---------- */
   search(){
-    const q=$('#q').value.trim().toLowerCase();this.searching=!!q;
+    const q=$('#q').value.trim().toLowerCase(),mod=!!this.onlyChanged;this.searching=!!q||mod;
     const words=q.split(/\s+/).filter(Boolean);
-    this.panels.forEach((p,i)=>{p.hidden=q?false:i!==this.tab;p.classList.toggle('res',!!q)});
+    this.panels.forEach((p,i)=>{p.hidden=this.searching?false:i!==this.tab;p.classList.toggle('res',this.searching)});
     for(const p of this.panels.slice(1)){
       let any=false;const groups={};
-      for(const row of p.querySelectorAll('[data-s]')){const hit=!q||words.every(w=>row.dataset.s.includes(w));row.dataset.miss=hit?'':'1';row.hidden=!hit||row.dataset.when==='1';if(hit&&!row.hidden){any=true;groups[row.dataset.g]=1}}
-      for(const h of p.querySelectorAll('h4'))h.hidden=!!q&&!groups[h.dataset.group];
-      for(const h of p.querySelectorAll('.help,.extra'))h.hidden=!!q;
-      let t=p.querySelector('h5.tt');if(!t){t=el('h5','tt');t.textContent=SCHEMA.tabs[this.panels.indexOf(p)][1];p.prepend(t)}t.hidden=!q;
-      if(q)p.hidden=!any;
+      for(const row of p.querySelectorAll('[data-s]')){const hit=(!q||words.every(w=>row.dataset.s.includes(w)))&&(!mod||row.classList.contains('chg'));row.dataset.miss=hit?'':'1';row.hidden=!hit||row.dataset.when==='1';if(hit&&!row.hidden){any=true;groups[row.dataset.g]=1}}
+      for(const h of p.querySelectorAll('h4'))h.hidden=this.searching&&!groups[h.dataset.group];
+      for(const h of p.querySelectorAll('.help,.extra'))h.hidden=this.searching;
+      let t=p.querySelector('h5.tt');if(!t){t=el('h5','tt');t.textContent=SCHEMA.tabs[this.panels.indexOf(p)][1];p.prepend(t)}t.hidden=!this.searching;
+      if(this.searching)p.hidden=!any;
     }
     this.renderCards();this.layoutDirty=true;
   },
@@ -251,7 +262,7 @@ UI={
     this.recBtn=btn('Record video',()=>App.record());
     const h2=el('h4');h2.textContent='Reset';panel.append(h2);
     const row2=el('div','sg extra');panel.append(row2);
-    const r=el('button','ch');r.textContent='Sharp liquid glass';r.onclick=()=>{P.ref=2;P.blr=0;P.dsp=.18;P.bzl=1;persist();this.sync()};
+    const r=el('button','ch');r.textContent='Sharp liquid glass';r.onclick=()=>{P.ref=2;P.blr=0;P.dsp=.18;P.bzl=1;persist();this.sync()};r.textContent='Clear glass';
     const r3=el('button','ch');r3.textContent='Default look';r3.onclick=()=>{for(const k of SYSTEM_KEYS)if(!PDEF[k].quality&&PDEF[k].tab!=='music'||['dir','shock','msn','aring','abeat','aspace','afield','aglow','aspeed','bpu'].includes(k))P[k]=D[k];Exposure.reset();persist();this.sync();notice('Look reset to defaults.',2500)};row2.append(r3);
     const r2=el('button','ch');r2.textContent='Default quality';r2.onclick=()=>{for(const k of SYSTEM_KEYS)if(PDEF[k].g==='Quality')P[k]=D[k];Engine.allocate(quality(),true);persist();this.sync()};
     row2.append(r,r2);
@@ -279,7 +290,7 @@ UI={
     if(!this.searching)this.panels.forEach((p,i)=>p.hidden=i!==t);
     this.tabBtns.forEach((b,i)=>{b.classList.toggle('on',i===t);b.setAttribute('aria-selected',i===t)});this.tabBtns[t].scrollIntoView({inline:'nearest',block:'nearest'});
     $('#bd').scrollTop=this.scroll[t]|0;$('#kp').classList.toggle('on',t===0);$('#kt').classList.toggle('on',t>0);
-    this.layoutDirty=true;this.persistUi();
+    this.describeTab();this.layoutDirty=true;this.persistUi();
   },
   shut(){if(this.tab>=0)this.scroll[this.tab]=$('#bd').scrollTop;$('#sh').classList.remove('o');this.open=false;this.disarm();$('#kp').classList.remove('on');$('#kt').classList.remove('on');this.layoutDirty=true;this.persistUi()},
   buildDock(){
@@ -287,7 +298,10 @@ UI={
     const add=(id,label,fn)=>{const b=el('button','k',svgIcon(I[id])+(id==='y'?'<i id="sy"></i>':''));b.id='k'+id;b.setAttribute('aria-label',label);b.onclick=()=>fn(b);dock.append(b);return b};
     add('p','Presets',()=>this.show(0));
     add('t','Settings',()=>this.show(this.lastTab));
-    add('y','Next space',()=>{this.change('space',(P.space+1)%PDEF.space.o.length);notice(PDEF.space.o[P.space],1500)});
+    // Randomise: tap for a new look, hold for the previous one.
+    const yb=add('y','Random look (tap: new, hold: back)',()=>{});yb.onclick=null;yb.title='Random look: tap for a new one, hold to go back';
+    let yt=0,yl=false;yb.addEventListener('pointerdown',()=>{yl=false;clearTimeout(yt);yt=setTimeout(()=>{yl=true;Rand.back()},450)});
+    yb.addEventListener('pointerup',()=>{clearTimeout(yt);if(!yl)Rand.next()});yb.addEventListener('pointerleave',()=>clearTimeout(yt));
     add('u','Undo',()=>{if(!Engine.restore())notice('Nothing to undo.',1500)});
     add('z','Pause',b=>{App.paused=!App.paused;b.classList.toggle('on',App.paused);b.querySelector('path').setAttribute('d',App.paused?'M8 5l11 7-11 7z':I.z)});
     add('c','Clear',()=>Engine.clear());
@@ -295,7 +309,6 @@ UI={
     else if(!NATIVE&&document.documentElement.requestFullscreen){const I2='M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',I3='M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
       const fb=add('f','Fullscreen',()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{}));fb.innerHTML=svgIcon(I2);
       document.addEventListener('fullscreenchange',()=>{fb.innerHTML=svgIcon(document.fullscreenElement?I3:I2);fb.classList.toggle('on',!!document.fullscreenElement)})}
-    this.upd.push(()=>{$('#sy').textContent=P.space?String(P.space):''});
   },
 
   /* ---------- per-frame: glass rects, tab capsule, dissolve ---------- */

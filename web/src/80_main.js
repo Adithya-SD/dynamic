@@ -23,7 +23,7 @@ const App={
       if(e.code==='Space'){e.preventDefault();$('#kz').click()}else if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();$('#ku').click()}
       else if(e.key==='/'){e.preventDefault();if(!UI.open)UI.show(UI.lastTab);$('#q').focus()}else if(e.key==='Escape'&&UI.open)UI.shut();
       else if(e.key==='ArrowRight'){UI.cycle(1);notice(allPresets()[current].n,1200)}else if(e.key==='ArrowLeft'){UI.cycle(-1);notice(allPresets()[current].n,1200)}
-      else if(e.key==='Tab'){e.preventDefault();UI.open?UI.shut():UI.show(UI.lastTab)}else if(e.key==='h'||e.key==='H'){UI.hidden||UI.dissolving?UI.wake():UI.hideNow()}});
+      else if(e.key==='Tab'){e.preventDefault();UI.open?UI.shut():UI.show(UI.lastTab)}else if(e.key==='h'||e.key==='H'){UI.hidden||UI.dissolving?UI.wake():UI.hideNow()}else if(e.key==='r'||e.key==='R'){e.shiftKey?Rand.back():Rand.next()}});
     cv.addEventListener('webglcontextlost',e=>{e.preventDefault();this.lost=true;notice('Graphics were reset by the system. Reload to continue; your settings are saved.',60000)});
     requestAnimationFrame(t=>this.frame(t));done();
     Engine.warmRest();
@@ -34,7 +34,7 @@ const App={
     if(cap&&cap<Gov.refresh-2&&el<1/cap-.002)return;
     if(!this.firstFrame){this.firstFrame=performance.now()}
     this.last=now;const dt=Math.min(Math.max(el,1/500),.05),t0=performance.now();
-    this.frames++;this.fpsT+=el;if(this.fpsT>=.5){this.fps=this.frames/this.fpsT;this.frames=0;this.fpsT=0;this.adapt();Gov.review(this.fps);UI.hud&&UI.hud()}
+    this.frames++;this.fpsT+=el;if(this.fpsT>=.5){this.fps=this.frames/this.fpsT;this.frames=0;this.fpsT=0;Gov.review(this.fps);UI.hud&&UI.hud()}
     clock+=dt;stepMorph(dt);
     if(P.cyc&&!this.paused&&(this.cycT=(this.cycT||0)+dt)>20){this.cycT=0;UI.cycle()}
 
@@ -76,11 +76,6 @@ const App={
     this.cpu=this.cpu*.9+(performance.now()-t0)*.1;
     if(UI.open&&UI.tabId()==='system'&&now-this.diagT>1000){this.diagT=now;UI.diag.textContent=`${Math.round(this.fps)} fps · CPU ${this.cpu.toFixed(1)} ms · render ${Engine.res.join('×')} · sim ${Engine.sim.join('×')} · ink ${Engine.ink.join('×')} · GPU memory ~${Math.round(Engine.memoryMiB())} MiB · ${gl.getParameter(gl.RENDERER)}`}
     if(audio._media&&UI.seek){UI.seek.max=audio.duration||1;if(document.activeElement!==UI.seek)UI.seek.value=audio.position||0}
-  },
-  adapt(){return;   // superseded by Gov (78_perf.js)
-    return;
-    this.slow=this.fps<40?(this.slow||0)+1:0;
-    if(this.slow>=6&&P.rscale>.5){this.slow=0;P.rscale=Math.max(.5,+(P.rscale-.1).toFixed(2));Engine.allocate(quality());persist();UI.sync()}
   },
   record(){
     if(this.rec){this.rec.r.stop();return}

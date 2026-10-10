@@ -47,10 +47,10 @@ const Gov={
 };
 
 const Exposure={
-  k:1,t:0,pbo:null,fence:null,tiny:null,px:new Uint8Array(16*16*4),
+  k:1,t:0,pbo:null,fence:null,tiny:null,px:new Uint8Array(16*16*4),bp:0,bpS:0,
   /* Called after the frame is drawn (scene holds the composed, tone-mapped frame). */
   sample(dt){
-    this.t+=dt;
+    this.t+=dt;this.bpS+=(this.bp-this.bpS)*(1-Math.exp(-dt/.7));   // black point glides
     if(this.fence){const st=gl.clientWaitSync(this.fence,0,0);if(st===gl.ALREADY_SIGNALED||st===gl.CONDITION_SATISFIED){
       gl.deleteSync(this.fence);this.fence=null;gl.bindBuffer(gl.PIXEL_PACK_BUFFER,this.pbo);gl.getBufferSubData(gl.PIXEL_PACK_BUFFER,0,this.px);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);this.steer()}}
     if(this.fence||this.t<.25)return;
@@ -65,6 +65,9 @@ const Exposure={
     v.sort();let top=0;for(let i=192;i<256;i++)top+=v[i];top/=64;const p50=v[128],p90=v[230],p98=v[250];
     this.top=p90;this.p98=p98;
     this.p50=p50;
+    // Black point: as high as the picture allows. Whatever is dimmer than the darkest third of the frame is haze, not
+    // content, so it goes to pure black and the rest is stretched back up (levels), which keeps the contrast.
+    this.bp=clamp(v[88]*.85,0,.26);
     const dt=this.dtSteer||.25;
     if(!P.aex){this.k=1;return}
     // Leave a well-lit frame alone. Pull back only when the top of the picture clips; lift only when it is nearly black.
