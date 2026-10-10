@@ -277,21 +277,42 @@ var UI=null;
     }
     async _connectAnalysis(source, generation) {
       const ctx = this._ctx;
-      let usedWorklet = false;
-      if (ctx.audioWorklet && root.Blob && root.URL && URL.createObjectURL) {
+      let mode = null;
+      const mute = () => { if (!this._mute) { this._mute = ctx.createGain(); this._mute.gain.value = 0; this._mute.connect(ctx.destination); } return this._mute; }; // keeps the graph pulling
+      // 1. AudioWorklet (audio thread). Some browsers refuse blob: modules on file:// pages, so a data: URL is tried too.
+      if (ctx.audioWorklet && root.Blob && root.URL && URL.createObjectURL && !root.__noWorklet) {
+        const src = workletSource();
+        const makers = [() => URL.createObjectURL(new Blob([src], { type: 'application/javascript' })), () => 'data:application/javascript;base64,' + btoa(unescape(encodeURIComponent(src)))];
+        for (const make of makers) {
+          try {
+            let load = moduleLoads.get(ctx);
+            if (!load) { const url = make(); load = ctx.audioWorklet.addModule(url).finally(() => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); }); moduleLoads.set(ctx, load); load.catch(() => moduleLoads.delete(ctx)); }
+            await load; if (generation !== this._generation) return null;
+            const node = new AudioWorkletNode(ctx, 'dynamic-analysis', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers' });
+            source.connect(node); this._worklet = node; node.connect(mute());
+            node.port.onmessage = e => { const d = e.data; if (!(d instanceof Float32Array)) return; this._emit(d.subarray(0, 24), d[28], d.subarray(24, 28)); node.port.postMessage(d, [d.buffer]); };
+            mode = 'worklet'; break;
+          } catch (e) { this.workletError = String(e && e.message || e); moduleLoads.delete(ctx); }
+        }
+      }
+      // 2. ScriptProcessor on the main thread: the same analysis code, same quality, just not on the audio thread.
+      if (!mode && ctx.createScriptProcessor && !root.__noScript) {
         try {
-          let load = moduleLoads.get(ctx);
-          if (!load) { const url = URL.createObjectURL(new Blob([workletSource()], { type: 'application/javascript' })); load = ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url)); moduleLoads.set(ctx, load); load.catch(() => moduleLoads.delete(ctx)); }
-          await load; if (generation !== this._generation) return null;
-          const node = new AudioWorkletNode(ctx, 'dynamic-analysis', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers' });
-          source.connect(node); this._worklet = node;
-          this._mute = ctx.createGain(); this._mute.gain.value = 0; node.connect(this._mute); this._mute.connect(ctx.destination); // keeps the graph pulling
-          node.port.onmessage = e => { const d = e.data; if (!(d instanceof Float32Array)) return; this._emit(d.subarray(0, 24), d[28], d.subarray(24, 28)); node.port.postMessage(d, [d.buffer]); };
-          usedWorklet = true;
-        } catch (_) { }
+          const core = analysisCore(ctx.sampleRate), node = ctx.createScriptProcessor(512, 2, 1), mono = new Float32Array(128), sr = ctx.sampleRate;
+          node.onaudioprocess = e => {
+            const inb = e.inputBuffer, a = inb.getChannelData(0), b = inb.numberOfChannels > 1 ? inb.getChannelData(1) : null, n = a.length;
+            for (let o = 0; o + 128 <= n; o += 128) {
+              for (let j = 0; j < 128; j++) mono[j] = b ? (a[o + j] + b[o + j]) * .5 : a[o + j];
+              core.process(mono); this._emit(core.levels, e.playbackTime + (o + 128) / sr, core.odf);
+            }
+          };
+          source.connect(node); node.connect(mute()); this._proc = node; mode = 'script';
+        } catch (e) { this.scriptError = String(e && e.message || e); }
       }
       if (generation !== this._generation) return null;
-      if (!usedWorklet) {
+      this.analysisMode = mode || 'analyser';
+      // 3. Last resort: the browser's own analyser, polled. Coarser spectrum and more latency.
+      if (!mode) {
         this._analyser = ctx.createAnalyser(); this._analyser.fftSize = 1024; this._analyser.smoothingTimeConstant = 0;
         source.connect(this._analyser); this._freq = new Float32Array(this._analyser.frequencyBinCount);
         this._fallbackTimer = root.setInterval(() => this._fallback(), 8);
@@ -327,6 +348,7 @@ var UI=null;
     _releaseAll() {
       if (this._fallbackTimer !== null) { root.clearInterval(this._fallbackTimer); this._fallbackTimer = null; }
       if (this._worklet) { this._worklet.port.onmessage = null; try { this._worklet.disconnect(); } catch (_) { } this._worklet = null; }
+      if (this._proc) { this._proc.onaudioprocess = null; try { this._proc.disconnect(); } catch (_) { } this._proc = null; }
       if (this._mute) { try { this._mute.disconnect(); } catch (_) { } this._mute = null; }
       if (this._source) { try { this._source.disconnect(); } catch (_) { } this._source = null; }
       if (this._analyser) { try { this._analyser.disconnect(); } catch (_) { } this._analyser = null; }
