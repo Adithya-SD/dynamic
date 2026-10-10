@@ -98,7 +98,7 @@ H.geoLive=async function(list,{name='geolive',cols=4,w=360,frames=150,preset}={}
 H.live=async function(url,{preset='Flower of Life',start=0,snaps=[],dur=20,name='live',log=true}={}){
   const i=allPresets().findIndex(x=>x.n===preset);applyPreset(i);Engine.clear();UI.hidden=true;
   const blob=await new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('GET',url);x.responseType='blob';x.onload=()=>ok(x.response);x.onerror=no;x.send()});await audio.select('file',{file:new File([blob],'t.wav',{type:'audio/wav'})});
-  audio._media.currentTime=start;Music.resetSync();
+  audio._media.currentTime=start;Music.resetSync&&Music.resetSync();
   const rows=[],shots=[],t0=performance.now();let k=0;
   while((performance.now()-t0)/1000<dur){await new Promise(r=>setTimeout(r,250));const st=audio._media.currentTime;
     if(log)rows.push([st.toFixed(1),Math.round(Music.bpm),Music.conf.toFixed(2),Music.section.state,Music.dropN,Exposure.k.toFixed(2),(Exposure.top||0).toFixed(2),(Exposure.p98||0).toFixed(2),(Exposure.p50||0).toFixed(2),Music.complexity.toFixed(2),Math.round(App.fps)].join(' '));

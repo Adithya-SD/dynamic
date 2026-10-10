@@ -31,7 +31,7 @@ const Engine={
     if(programIfReady(vs,fs,want)){this.live[key]=want;return want}
     return this.live[key]||(this.live[key]=want);
   },
-  BASE:['copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
+  BASE:['ghost','copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
   /* Compile everything the first frame needs, in parallel. Other spaces follow quietly, one at a time. */
   async warm(onProgress){
     const d=this.spaceDefs(Space.u.uSpace),list=this.BASE.filter(([,f])=>f!=='compose.frag').map(x=>[...x,'']);
@@ -69,7 +69,7 @@ const Engine={
       if(force||!resSame){n.scene=T(...s.res,'rgba16f');n.lit=T(...s.res,'rgba16f');n.bloom=[];let bw=s.res[0],bh=s.res[1];for(let i=0;i<5;i++){bw=Math.max(1,bw>>1);bh=Math.max(1,bh>>1);n.bloom.push(T(bw,bh,'rgba16f'))}}
       for(const k in n){const old=this[k];if(Array.isArray(old))old.forEach(kill);else kill(old);this[k]=n[k]}
       if(n.dye){this.undo.forEach(u=>kill(u));this.undo=[]}
-      if(n.scene){kill(this.echo);this.echo=null}
+      if(n.scene){Trans.free();this.lastFrame=null;kill(this.echo);this.echo=null;if(this.dof){this.dof.forEach(kill);this.dof=null}}
       this.sim=s.sim;this.ink=s.ink;this.res=s.res;this.world=s.world;
       cv.width=s.res[0];cv.height=s.res[1];this.error='';return true;
     }catch(e){made.forEach(kill);this.error='GPU allocation failed; kept previous quality. '+e.message;return false}
@@ -105,19 +105,19 @@ const Engine={
     pass('gradient.frag',{uP:this.prs.r,uVel:this.vel.r,uTx:tx},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.vel.r,uRefTx:ref,uDt:dt,uDiss:P.vel},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.dye.r,uRefTx:ref,uDt:dt,uDiss:0},this.fwd);
-    pass('maccormack.frag',{uVel:this.vel.r,uSrc:this.dye.r,uFwd:this.fwd,uRefTx:ref,uSrcTx:[1/this.ink[0],1/this.ink[1]],uDt:dt,uDiss:P.den},this.dye.w);this.dye.swap();
+    pass('maccormack.frag',{uVel:this.vel.r,uSrc:this.dye.r,uFwd:this.fwd,uRefTx:ref,uSrcTx:[1/this.ink[0],1/this.ink[1]],uDt:dt,uDiss:P.den,uSub:.006+.008*P.den},this.dye.w);this.dye.swap();
   },
 
-  particles(dt,P,emit,time,palette,paused){
+  particles(dt,P,emit,time,palette,paused,fdt){
     if(!P.fx)return;
-    if(!paused){pass('particles_update.frag',{uState:this.parts.r,uVel:this.vel.r,uRefTx:this.refTx(),uEmit:emit,uDt:dt,uSpeed:P.pspd,uLife:P.plf,uTime:time,uWrap:this.wrap?1:0,...Geo.particleUniforms(P)},this.parts.w);this.parts.swap()}
+    if(!paused){pass('particles_update.frag',{uState:this.parts.r,uVel:this.vel.r,uRefTx:this.refTx(),uEmit:emit,uDt:dt,uSpeed:P.pspd,uLife:P.plf,uTime:time,uWrap:this.wrap?1:0,uMaxStep:.55,...Geo.particleUniforms(P)},this.parts.w);this.parts.swap()}
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     pass('fade.frag',{uAlpha:1-Math.pow(P.ptl,dt*60)},this.ptx);
     gl.blendFunc(gl.ONE,gl.ONE);
     const prog=program('particles.vert','particles.frag');gl.useProgram(prog.p);
     // Footprint in screen pixels is the same at any particle resolution (0.6 is the phone look); a higher one only sharpens it.
     const pq=this.ptx.w/this.ink[0],scale=this.ink[0]*.6/Math.max(1,this.res[0]/Math.min(devicePixelRatio||1,2));
-    setUniforms(prog,{uState:this.parts.r,uVel:this.vel.r,uSide:PART_SIDE,uTarget:[this.ptx.w,this.ptx.h],uRefTx:this.refTx(),uSize:P.psz*Math.max(1,scale)*pq/.6,uStretch:P.fx===4?2.2:1.1,uBright:P.pbr*.32,uMode:P.fx,uTime:time,uSat:P.s,uHue:P.h,uHueRange:P.hr,...palette});
+    setUniforms(prog,{uState:this.parts.r,uVel:this.vel.r,uSide:PART_SIDE,uTarget:[this.ptx.w,this.ptx.h],uRefTx:this.refTx(),uSize:P.psz*Math.max(1,scale)*pq/.6,uStretch:P.fx===4?2.2:1.1,uBright:P.pbr*.26*Math.min(2,(fdt||dt)*60)*Math.min(2.2,Math.pow((1-P.ptl)/.15,.85)),uMode:P.fx,uTime:time,uSat:P.s,uHue:P.h,uHueRange:P.hr,uSharp:P.psh,...palette});
     bindOut(this.ptx);gl.bindVertexArray(emptyVao);gl.drawArraysInstanced(gl.TRIANGLES,0,6,Math.max(1,Math.round(P.pn*PART_SIDE*PART_SIDE)));
     gl.disable(gl.BLEND);
   },
@@ -125,7 +125,7 @@ const Engine={
   /* Display: compose (fold once) → material → echo → bloom → final (glass, film). */
   render(P,look,glass,toScreen=true,out=null){
     const res=this.res,sp=Space.u;
-    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.5,uVib:P.vib,uTone:P.tone,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
+    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.08,uVib:P.vib,uTone:P.tone,uOrbL:look.orbL||[.4,.5,.75],uOrbRim:look.orbRim||[.3,.5,1],uOrbDepth:P.odepth,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
     let base=this.scene;
     if(P.rel>0||P.met>0||P.irs>0||P.fre>0){pass('material.frag',{uScene:this.scene,uTx:[1/res[0],1/res[1]],uRelief:P.rel,uSharp:P.spc,uLight:P.lgt*Math.PI/180,uMetal:P.met,uIris:P.irs,uRim:P.fre,uShine:0},this.lit);base=this.lit}
     if(P.echo>0){
@@ -133,6 +133,14 @@ const Engine={
       const a=res[0]/res[1];
       pass('echo.frag',{uCur:base,uPrev:this.echo.r,uEcho:P.echo,uZoom:look.echoZoom,uTwist:look.echoTwist,uCenter:look.echoCenter||[0,0],uAspect:a>=1?[a,1]:[1,1/a]},this.echo.w);this.echo.swap();base=this.echo.r;
     }else if(this.echo){kill(this.echo);this.echo=null}
+    let farA=this.black,farB=this.black,dof=0;
+    if(sp.uOrb>0&&P.odepth>0){   // backdrop blur for the ball: quarter and eighth size copies of the picture
+      const qw=Math.max(1,res[0]>>2),qh=Math.max(1,res[1]>>2);
+      if(!this.dof||this.dof[0].w!==qw||this.dof[0].h!==qh){if(this.dof)this.dof.forEach(kill);this.dof=[target(qw,qh,'rgba16f'),target(Math.max(1,res[0]>>3),Math.max(1,res[1]>>3),'rgba16f')]}
+      pass('bloom_down.frag',{uSrc:base,uTx:[2/res[0],2/res[1]],uThreshold:0,uFirst:0},this.dof[0]);
+      pass('bloom_down.frag',{uSrc:this.dof[0],uTx:[2/this.dof[0].w,2/this.dof[0].h],uThreshold:0,uFirst:0},this.dof[1]);
+      farA=this.dof[0];farB=this.dof[1];dof=Math.min(1,P.odepth*1.15);
+    }else if(this.dof){this.dof.forEach(kill);this.dof=null}
     let bloomTex=this.black,bloomAmt=0;
     if(look.bloom>0){
       const B=this.bloom;
@@ -142,8 +150,9 @@ const Engine={
       for(let i=B.length-2;i>=0;i--)pass('bloom_up.frag',{uSrc:B[i+1],uTx:[.5/B[i+1].w,.5/B[i+1].h]},B[i]);
       gl.disable(gl.BLEND);bloomTex=B[0];bloomAmt=look.bloom*.45;
     }
+    if(toScreen)this.lastFrame={base,bloom:bloomTex,amt:bloomAmt};
     const dp=res[0]/VW();
-    pass('final.frag',{uImg:base,uBloom:bloomTex,uRes:res,uBloomAmt:bloomAmt,uVig:P.vig,uContrast:P.ctr,uGrain:P.grain,uLens:P.lens,uTime:look.time,uDp:dp,
+    pass('final.frag',{...Trans.uniforms(look),uImg:base,uBloom:bloomTex,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dof,uBlack:P.blk>0?.008+P.blk*.34:0,uSharp:P.shp,uRes:res,uBloomAmt:bloomAmt,uVig:P.vig,uContrast:P.ctr,uGrain:P.grain,uLens:P.lens,uTime:look.time,uDp:dp,
       uR:glass.R,uQ:glass.Q,uX:glass.X,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:P.blr,uBezel:P.bzl,uDisp:P.dsp},out);
   },
   /* Clean frame (no interface) read straight from an offscreen target: works even when the page is not being presented. */

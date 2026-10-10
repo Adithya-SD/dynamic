@@ -4,8 +4,8 @@
 const TAU=Math.PI*2,PHI=(1+Math.sqrt(5))/2;
 const mirror1=x=>1-Math.abs(((x%2)+2)%2-1);
 const Space={
-  spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,
-  u:{uLoop:48,uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
+  spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,orbT:0,orbR:[1,0,0,0,1,0,0,0,1],
+  u:{uLoop:48,uOrb:0,uPulse:0,uOrbM:[1,0,0,0,1,0,0,0,1],uMobBg:[0,0],uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
   hyperbolic(p,q){
     p=Math.round(p);q=Math.round(q);
     if((p-2)*(q-2)<=4)q=Math.floor(2+4/(p-2))+1;
@@ -15,8 +15,8 @@ const Space={
     const xm=Math.max(cx-r,bx),ym=by,s=.9/Math.max(xm,ym);
     return{hyp:[cx,r,s,p],off:[.5-xm*s/2,.5-ym*s/2],q};
   },
-  update(P,dt,res,world,pulse,tl){
-    tl=tl||[0,0];
+  update(P,dt,res,world,pulse,tl,rv,zp){
+    tl=tl||[0,0];rv=rv||[0,0,0];zp=zp||0;this.u.uPulse=zp;
     const u=this.u,k=1+pulse;
     this.spin+=P.spin*dt*k;
     const d=P.drift*k;
@@ -25,18 +25,58 @@ const Space={
     this.phase[0]+=d*dt*.5;this.phase[1]-=d*dt*.35;
     this.poleT+=dt*(.05+Math.abs(d)*.08);
     u.uSpace=P.space|0;u.uRes=res;u.uWorld=world;u.uSegs=P.kal;u.uDepth=P.foldDepth;u.uSpin=this.spin;u.uTile=P.tile;
-    const hw=[.9,.6,.5,.3,.4,.4][u.uSpace]||.5;u.uTilt=[tl[0]*hw,tl[1]*hw];
+    const hw=([.9,.6,.5,.3,.4,.4][u.uSpace]||.5)*(P.orb>0?.3:1);u.uTilt=[tl[0]*hw,tl[1]*hw];
     u.uShift=u.uSpace===2?[this.shift[0]+tl[0]*.35,this.shift[1]+tl[1]*.35]:this.shift;
-    if(u.uSpace===3){const h=this.hyperbolic(P.hp,P.hq);u.uHyp=h.hyp;u.uHypOff=h.off;const m=Math.min(.62,Math.abs(P.drift)*.7);let mx=m*Math.cos(this.mobA)+tl[0]*.55,my=m*Math.sin(this.mobA)+tl[1]*.55;const ml=Math.hypot(mx,my);if(ml>.86){mx*=.86/ml;my*=.86/ml}u.uMob=[mx,my]}   // tilting walks you through the tiling
+    if(u.uSpace===3){const h=this.hyperbolic(P.hp,P.hq);u.uHyp=h.hyp;u.uHypOff=h.off;const m=Math.min(.62,Math.abs(P.drift)*.7);
+      const lim=(x,y)=>{const l=Math.hypot(x,y);return l>.86?[x*.86/l,y*.86/l]:[x,y]};
+      const amb=lim(m*Math.cos(this.mobA),m*Math.sin(this.mobA)),bg=lim(amb[0]+tl[0]*.55,amb[1]+tl[1]*.55);
+      u.uMobBg=bg;u.uMob=P.orb>0?amb:bg}   // tilting walks you through the tiling; round a ball it turns the ball instead (the backdrop still walks)
+    this.orb(P,dt,res,rv);
     const g=Math.max(1.01,P.growth),lnS=Math.log(g);u.uSpiral=[lnS/TAU,lnS,Math.max(1,Math.round(P.arms)),0];u.uSpiralPhase=[this.phase[0]+tl[0]*.6,this.phase[1]+tl[1]*.6];
     const ar=res[0]/res[1],gx=(.5-1/PHI/PHI)*Math.max(ar,1),gy=(.5-1/PHI/PHI)*Math.max(1/ar,1),w=this.poleT;
     u.uPoles=[-gx+.03*Math.cos(w),gy+.03*Math.sin(w*1.3),gx+.03*Math.cos(w*.8+2),-gy+.03*Math.sin(w+1)];
+  },
+  /* The ball: radius from the Ball setting; it turns by itself (a slowly wandering axis) and with the tilt. */
+  orb(P,dt,res,rv){
+    const u=this.u;
+    if(!(P.orb>0)){u.uOrb=0;return}
+    u.uOrb=(.2+.3*P.orb)*(1+u.uPulse*1.2);
+    const t=this.orbT+=dt,sg=(P.spin<0||P.drift<0)?-1:1,w=sg*(.1+Math.abs(P.spin)*.7+Math.abs(P.drift)*.25)*dt;
+    // spin about a wandering axis, applied in view space
+    const ax=Math.sin(t*.13)*.45,ay=1,az=Math.cos(t*.09)*.3;
+    this.orbR=matMul(rodrigues(ax*w,ay*w,az*w),this.orbR);
+    const R=matMul(rodrigues(rv[0],rv[1],rv[2]),this.orbR);
+    this.orbV=R;u.uOrbM=R;   // row-major R handed over as column-major is R transposed: view normal -> body normal
   },
   /* Render-pixel (y up) → sheet coordinates before the mirror fold. Mirrors spaceMap() in GLSL. */
   map(fx,fy){
     const u=this.u,R=u.uRes,sh=Math.min(R[0],R[1]);
     let qx=(fx-.5*R[0])/sh,qy=(fy-.5*R[1])/sh;
+    if(u.uOrb>0){
+      const bx=qx/u.uOrb,by=qy/u.uOrb,r2=bx*bx+by*by;
+      if(r2<1){
+        const nz=Math.sqrt(1-r2),M=u.uOrbM,nx=M[0]*bx+M[3]*by+M[6]*nz,ny=M[1]*bx+M[4]*by+M[7]*nz,nzz=M[2]*bx+M[5]*by+M[8]*nz,d=Math.max(1+nzz,1e-3);
+        return u.uSpace===3?this.hyper(nx/d,ny/d,u.uMob):this.flat(nx/d*.5,ny/d*.5);
+      }
+    }
+    qx*=1-u.uPulse;qy*=1-u.uPulse;
     {const dn=Math.max(.3,1+qx*u.uTilt[0]+qy*u.uTilt[1]);qx/=dn;qy/=dn}
+    return this.flat(qx,qy);
+  },
+  /* Poincaré disk point (unit disk; the outside is mirrored in) through the {p,q} fold. */
+  hyper(x,y,mob){
+    const u=this.u;
+    const r2=x*x+y*y;if(r2>1){x/=r2;y/=r2}
+    const[ax,ay]=mob;let nx=x-ax,ny=y-ay,dx=1-(ax*x+ay*y),dy=-(ax*y-ay*x);const dd=Math.max(dx*dx+dy*dy,1e-12);
+    x=(nx*dx+ny*dy)/dd;y=(ny*dx-nx*dy)/dd;
+    const[cx,cr,s,p]=u.uHyp,w=TAU/p,cr2=cr*cr;
+    for(let i=0;i<48;i++){let m=((Math.atan2(y,x)%w)+w)%w;if(m>w*.5)m=w-m;const l=Math.hypot(x,y);x=l*Math.cos(m);y=l*Math.sin(m);
+      const ex=x-cx,ey=y,d2=ex*ex+ey*ey;if(d2>=cr2)break;x=cx+ex*cr2/d2;y=ey*cr2/d2}
+    return[u.uHypOff[0]+x*s,u.uHypOff[1]+y*s];
+  },
+  /* Plane point (short-side units, already tilted) → sheet. */
+  flat(qx,qy){
+    const u=this.u,R=u.uRes,sh=Math.min(R[0],R[1]);
     const rot=(x,y,a)=>{const c=Math.cos(a),s=Math.sin(a);return[c*x-s*y,s*x+c*y]};
     const sheet=(x,y)=>[.5+x*sh/R[0]/u.uWorld,.5+y*sh/R[1]/u.uWorld];
     switch(u.uSpace){
@@ -49,13 +89,7 @@ const Space={
           d=(x-1)*-.8660254+y*-.5;if(d<0){x+=2*d*.8660254;y+=2*d*.5;inside=false}
           if(inside)break}
         return[.5+(x-.5)*.9,.5+(y-.2887)*.9]}
-      case 3:{[qx,qy]=rot(qx,qy,u.uSpin);let x=qx/.48,y=qy/.48;const r2=x*x+y*y;if(r2>1){x/=r2;y/=r2}
-        const[ax,ay]=u.uMob;let nx=x-ax,ny=y-ay,dx=1-(ax*x+ay*y),dy=-(ax*y-ay*x);const dd=Math.max(dx*dx+dy*dy,1e-12);
-        x=(nx*dx+ny*dy)/dd;y=(ny*dx-nx*dy)/dd;
-        const[cx,cr,s,p]=u.uHyp,w=TAU/p,cr2=cr*cr;
-        for(let i=0;i<48;i++){let m=((Math.atan2(y,x)%w)+w)%w;if(m>w*.5)m=w-m;const l=Math.hypot(x,y);x=l*Math.cos(m);y=l*Math.sin(m);
-          const ex=x-cx,ey=y,d2=ex*ex+ey*ey;if(d2>=cr2)break;x=cx+ex*cr2/d2;y=ey*cr2/d2}
-        return[u.uHypOff[0]+x*s,u.uHypOff[1]+y*s]}
+      case 3:{[qx,qy]=rot(qx,qy,u.uSpin);return this.hyper(qx/.48,qy/.48,u.uMobBg)}
       case 4:case 5:{let zx,zy;
         if(u.uSpace===5){const[a1,a2,b1,b2]=u.uPoles,nx=qx-a1,ny=qy-a2,dx=qx-b1,dy=qy-b2,dd=Math.max(dx*dx+dy*dy,1e-12);zx=(nx*dx+ny*dy)/dd;zy=(ny*dx-nx*dy)/dd}
         else[zx,zy]=rot(qx,qy,u.uSpin);
@@ -82,3 +116,10 @@ const Space={
     return{u:c[0],v:c[1],scale:clamp(scale,.25,1.5),vx:ox,vy:oy};
   }
 };
+/* 3x3 row-major helpers for the ball's orientation. */
+function matMul(a,b){const o=new Array(9);for(let i=0;i<3;i++)for(let j=0;j<3;j++)o[i*3+j]=a[i*3]*b[j]+a[i*3+1]*b[3+j]+a[i*3+2]*b[6+j];return o}
+function rodrigues(x,y,z){
+  const a=Math.hypot(x,y,z);if(a<1e-6)return[1,0,0,0,1,0,0,0,1];
+  const kx=x/a,ky=y/a,kz=z/a,c=Math.cos(a),s=Math.sin(a),t=1-c;
+  return[c+kx*kx*t,kx*ky*t-kz*s,kx*kz*t+ky*s, ky*kx*t+kz*s,c+ky*ky*t,ky*kz*t-kx*s, kz*kx*t-ky*s,kz*ky*t+kx*s,c+kz*kz*t];
+}

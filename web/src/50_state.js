@@ -37,7 +37,7 @@ function applyPreset(i,{animate=false}={}){
 const DISCRETE=new Set(SCHEMA.params.filter(p=>p.t||p.st>=1).map(p=>p.k));
 function stepMorph(dt){
   if(!morph)return;morph.t=Math.min(1,morph.t+dt/1.6);const e=morph.t*morph.t*(3-2*morph.t);
-  for(const k in morph.to){const a=morph.from[k],b=morph.to[k];P[k]=DISCRETE.has(k)?(morph.t<.5?a:b):a+(b-a)*e}
+  for(const k in morph.to){const a=morph.from[k],b=morph.to[k];P[k]=DISCRETE.has(k)?(morph.t<.03?a:b):a+(b-a)*e}
   hueBase=P.h;if(morph.t>=1)morph=null;UI&&UI.sync();
 }
 let persistTimer=0;

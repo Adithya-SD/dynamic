@@ -2,18 +2,47 @@
 // Glass: every UI surface is a rounded-rect SDF; inside it the live image is refracted at the bezel,
 // dispersed per channel and lit. Coordinates here are y-down pixels to match the UI layout.
 in vec2 v;out vec4 o;
-uniform sampler2D uImg,uBloom;
+uniform sampler2D uImg,uBloom,uFarA,uFarB;
+uniform sampler2D uGhost;uniform float uGhostA,uGhostT,uGhostK;uniform vec3 uGhostC;   // the last frame, melting away (76_trans.js)
+uniform float uOrb,uDof;   // ball radius (short-side units) and how out of focus its backdrop is
 uniform vec2 uRes;
-uniform float uBloomAmt,uVig,uContrast,uGrain,uLens,uTime,uDp;
+uniform float uBloomAmt,uVig,uContrast,uGrain,uLens,uTime,uDp,uBlack,uSharp;
 uniform vec4 uR[8];uniform vec2 uQ[8];uniform float uX[8];
 uniform float uN,uRefr,uBlur,uBezel,uDisp;
-vec3 img(vec2 f){vec2 u=vec2(f.x,uRes.y-f.y)/uRes;return texture(uImg,u).rgb+texture(uBloom,u).rgb*uBloomAmt+vec3(.012,.016,.03)+.035*vec3(.4,.5,1.)*u.y;}
+// Depth of field: behind the ball the picture is replaced by a wide soft blur (bokeh from the quarter and eighth size copies).
+vec3 base(vec2 u){
+  vec3 c=texture(uImg,u).rgb;
+  if(uDof>0.){
+    float r=length((u-.5)*uRes)/(uOrb*min(uRes.x,uRes.y));
+    float m=smoothstep(.97,1.12,r)*uDof;
+    if(m>0.){vec3 s=texture(uFarA,u).rgb*.4+texture(uFarB,u).rgb*.3;vec2 t=6.4/uRes;
+      s+=(texture(uFarA,u+vec2(t.x,0.)).rgb+texture(uFarA,u-vec2(t.x,0.)).rgb+texture(uFarA,u+vec2(0.,t.y)).rgb+texture(uFarA,u-vec2(0.,t.y)).rgb)*.075;
+      c=mix(c,s,m);}
+  }
+  return c;
+}
+vec3 img(vec2 f){vec2 u=vec2(f.x,uRes.y-f.y)/uRes;return base(u)+texture(uBloom,u).rgb*uBloomAmt;}
 float sd(vec2 p,vec4 R,float r){vec2 h=R.zw*.5,q=abs(p-R.xy-h)-h+r;return length(max(q,0.))+min(max(q.x,q.y),0.)-r;}
 void main(){
   vec2 fc=vec2(gl_FragCoord.x,uRes.y-gl_FragCoord.y);
   vec3 col;
-  if(uLens>0.){vec2 d=(v-.5)*uLens*.012;col=vec3(texture(uImg,v+d).r,texture(uImg,v).g,texture(uImg,v-d).b)+texture(uBloom,v).rgb*uBloomAmt+vec3(.012,.016,.03)+.035*vec3(.4,.5,1.)*v.y;}
+  if(uLens>0.){vec2 d=(v-.5)*uLens*.012;col=vec3(base(v+d).r,base(v).g,base(v-d).b)+texture(uBloom,v).rgb*uBloomAmt;}
   else col=img(fc);
+  if(uGhostA>0.){
+    float t=uGhostT;
+    if(uGhostK<.5){   // dissolve: the old picture drifts outwards a little as it fades
+      col=mix(col,texture(uGhost,.5+(v-.5)/(1.+t*.05)).rgb,uGhostA);
+    }else{   // ring of light opening from the centre: the new picture inside, the old one outside
+      vec2 p=(v-.5)*uRes/min(uRes.x,uRes.y);float r=length(p),mx=.5*length(uRes/min(uRes.x,uRes.y))+.12,e=1.-pow(1.-t,2.2),rad=e*mx;
+      float k=smoothstep(rad-.05,rad+.05,r),ring=exp(-pow((r-rad)/.02,2.))*(1.-t);
+      col=mix(col,texture(uGhost,v).rgb,k)+uGhostC*ring*.9;
+    }
+  }
+  if(uSharp>0.){   // unsharp mask on the picture itself (not the glass): crisp edges
+    vec2 t=1./uRes;vec3 s0=texture(uImg,v+vec2(t.x,0.)).rgb+texture(uImg,v-vec2(t.x,0.)).rgb+texture(uImg,v+vec2(0.,t.y)).rgb+texture(uImg,v-vec2(0.,t.y)).rgb;
+    col+=(texture(uImg,v).rgb-s0*.25)*uSharp;col=max(col,0.);}
+  // Black point: whatever is fainter than this is pushed to true black, so fading ink never leaves a coloured smudge behind.
+  if(uBlack>0.)col*=smoothstep(0.,uBlack,max(col.r,max(col.g,col.b)));
   float best=1e5,a=0.,rr=0.,dsv=0.;vec4 R=vec4(0.);
   int nr=int(uN);for(int i=0;i<nr;i++){float d=sd(fc,uR[i],uQ[i].x);if(d<best){best=d;R=uR[i];rr=uQ[i].x;a=uQ[i].y;dsv=uX[i];}}
   col*=1.-.32*a*(1.-dsv)*exp(-max(best,0.)/(16.*uDp));
@@ -36,7 +65,8 @@ void main(){
   }
   col*=1.-uVig*dot(v-.5,v-.5);
   col=max((col-.35)*uContrast+.35,0.);
-  if(uGrain>0.)col+=(hash12(gl_FragCoord.xy+fract(uTime*7.13)*917.)-.5)*uGrain*.12*(.4+col);
-  col+=(hash12(gl_FragCoord.xy*1.37+3.1)-.5)/255.;
+  float live=smoothstep(0.,.02,max(col.r,max(col.g,col.b)));
+  if(uGrain>0.)col+=(hash12(gl_FragCoord.xy+fract(uTime*7.13)*917.)-.5)*uGrain*.12*(.4+col)*live;
+  col+=(hash12(gl_FragCoord.xy*1.37+3.1)-.5)/255.*live;
   o=vec4(col,1.);
 }

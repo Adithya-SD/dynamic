@@ -48,6 +48,7 @@ function setUniforms(prog,values){
       case gl.FLOAT_VEC2:gl.uniform2fv(L,x);break;
       case gl.FLOAT_VEC3:gl.uniform3fv(L,x);break;
       case gl.FLOAT_VEC4:gl.uniform4fv(L,x);break;
+      case gl.FLOAT_MAT3:gl.uniformMatrix3fv(L,false,x);break;
       case gl.INT:case gl.BOOL:gl.uniform1i(L,x);break;
     }
   }

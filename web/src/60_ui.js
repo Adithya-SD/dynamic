@@ -177,7 +177,7 @@ UI={
       b.querySelector('span').textContent=pr.n;b.setAttribute('aria-label','Load '+pr.n);
       b.style.background=`linear-gradient(0deg,#000a,#0000 75%),linear-gradient(135deg,${g(0)},${g(.5)},${g(1)})`;
       if(v.geo>0){b.classList.add('gp');b.dataset.geo=v.geo;b.style.setProperty('--g1',g(0));b.style.setProperty('--g2',g(.6))}
-      b.classList.toggle('on',i===current);b.onclick=()=>{applyPreset(i,{animate:false});Engine.snapshot()};grid.append(b);
+      b.classList.toggle('on',i===current);b.onclick=()=>{applyPreset(i,{animate:true});Engine.snapshot()};grid.append(b);
     });
     this.cardThumbs(grid);
     if(this.panels&&this.panels[0])this.panels[0].hidden=q?!grid.children.length:this.tab!==0;

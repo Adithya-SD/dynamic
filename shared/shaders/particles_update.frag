@@ -9,7 +9,7 @@ uniform sampler2D uState,uVel,uGeo;
 uniform vec2 uRefTx,uGeoAsp;
 uniform vec4 uEmit;   // x, y, active, spread
 uniform vec4 uGeoT;   // scale, rotA, rotB, tile
-uniform float uDt,uSpeed,uLife,uTime,uWrap,uBeh,uPull,uScatter,uReset;
+uniform float uDt,uSpeed,uLife,uTime,uWrap,uBeh,uPull,uScatter,uReset,uMaxStep;
 float inside(vec2 a){return uGeoT.w>.5?1.:step(max(abs(a.x),abs(a.y)),1.);}
 float mask(vec2 g,float lod){
   vec2 a=rot2(g,uGeoT.y),b=rot2(g,uGeoT.z);
@@ -19,6 +19,7 @@ vec2 grad(vec2 g,float lod){float e=exp2(lod)*2./1024.;return vec2(mask(g+vec2(e
 void main(){
   vec4 s=texture(uState,v);
   vec2 flow=texture(uVel,s.xy).xy*uRefTx*uDt*uSpeed;
+  {float fl=length(flow),mx=uMaxStep*uDt;if(fl>mx)flow*=mx/fl;}   // never faster than the eye can follow
   if(uBeh>.5&&(uBeh<1.5||uBeh>4.5)){
     vec2 g=(s.xy-.5)*uGeoAsp/uGeoT.x,toUv=uGeoT.x/uGeoAsp;
     vec2 gc=grad(g,5.),gm=grad(g,3.5),gf=grad(g,2.);

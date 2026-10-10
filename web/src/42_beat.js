@@ -195,7 +195,7 @@
       this.intensity += (Math.min(1, Math.max(0, (loud + 12) / 15)) * (silent ? 0 : 1) - this.intensity) * k(.25);
       this.drop *= Math.exp(-dt / .6);
       const h = this.bassHist, before = h.length > 40 ? Math.max(...h.slice(-80, -10)) : 99;
-      if (!silent && this.lf - before > 12 && prom > -9 && loud > -4 && time - this.lastDrop > 8) {
+      if (!silent && this.lf - before > 10 && prom > -10 && loud > -5 && time - this.lastDrop > 6.5) {
         this.lastDrop = time; this.drop = 1; this.noBass = 0; this.events.push(time); this.go('full', time);
       }
       // Build: no bass while the top end rises (rolls, risers, noise sweeps). Calm: quiet or bassless and flat.

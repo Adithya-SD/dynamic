@@ -96,6 +96,8 @@ const Music={
       [...UI.srcBtns.children].forEach(b=>b.classList.toggle('on',b.dataset.kind===(ok?s.state:'off')));UI.fileRow.hidden=!['file','stream'].includes(s.state)};
   },
   native:false,
+  /* Fast songs get gentler pushes: a beat every 0.35 s must not shove as hard as one every 0.6 s. */
+  tempoK(){return this.bpm>40&&this.conf>.25?clamp(Math.sqrt(100/this.bpm),.7,1.1):1},
   active(){return this.native||['mic','desktop','file','stream'].includes(audio.state)},
   /* New song or a seek: forget tempo and sections so the clock re-locks within a couple of seconds. */
   resetSync(){this.tracker.reset();this.section.reset();this.offset=null;this.conf=0;this.bpm=0},
@@ -118,10 +120,10 @@ const Music={
     let e=0,bass=0;const W=VW(),H=VH(),S=Math.min(W,H),r=Input.radius();
     for(let i=0;i<24;i++){
       const lv=Math.min(1,this.levels[i]*P.msn);e+=lv;if(i<5)bass+=lv/5;
-      this.angles[i]+=dt*(.18+lv*2.4)*P.aspeed;
+      this.angles[i]+=dt*(.12+lv*1.4)*P.aspeed*musicSpeed;
       const R=S*(.025+.42*i/23),a=this.angles[i]+i*GOLDEN_ANGLE,pt=[W/2+Math.cos(a)*R,H/2-Math.sin(a)*R],pv=this.prev[i];
       if(lv>.02&&!App.paused&&P.aring>0){
-        const n=pv?Math.max(1,Math.min(4,Math.ceil(Math.hypot(pt[0]-pv[0],pt[1]-pv[1])/10))):1,f=lv*P.frc*.009*P.aring*dt*60/n;
+        const n=pv?Math.max(1,Math.min(4,Math.ceil(Math.hypot(pt[0]-pv[0],pt[1]-pv[1])/10))):1,f=lv*P.frc*.0065*P.aring*dt*60/n;
         for(let k=1;k<=n;k++){const t=k/n,x=pv?pv[0]+(pt[0]-pv[0])*t:pt[0],y=pv?pv[1]+(pt[1]-pv[1])*t:pt[1];
           Input.emit(x,y,-Math.sin(a)*f,Math.cos(a)*f,inkColor(i,lv*180,x/W,1-y/H,i).map(z=>z*.28*lv*dt*60/n*P.aring),r*.22)}
       }
@@ -146,16 +148,16 @@ const Music={
     let n=0;
     while(this.events.length&&n++<64){const[b,s]=this.events.shift(),lv=Math.min(1,s*P.msn);this.onset=Math.max(this.onset,lv);
       if(!P.bpu||App.paused)continue;
-      const a=this.angles[b]+b*GOLDEN_ANGLE,R=S*(.025+.42*b/23),x=W/2+Math.cos(a)*R,y=H/2-Math.sin(a)*R,f=P.frc*.013*lv*P.abeat;
-      Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(b,150,x/W,1-y/H,b).map(z=>z*.2*lv),r*.3)}
+      const a=this.angles[b]+b*GOLDEN_ANGLE,R=S*(.025+.42*b/23),x=W/2+Math.cos(a)*R,y=H/2-Math.sin(a)*R,f=P.frc*.009*lv*P.abeat*this.tempoK();
+      Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(b,150,x/W,1-y/H,b).map(z=>z*.27*lv),r*.3)}
     // One pulse for everything: predicted beats when the clock is sure, raw onsets when it is not (ambient, rubato).
     const c=Math.min(1,this.conf*1.3);
     this.beat=Math.max(c*this.pulse,(1-c*.7)*this.onset,this.drop);
     // Every confident beat throws a symmetric ring of bursts across the whole screen; downbeats and drops throw wider ones.
     const carried=P.geo>0&&(GEO_BEH[P.beh|0]||{}).parts;   // particles already carry the beat
     if(this.onBeat&&P.bpu&&!App.paused&&P.abeat>0&&!carried){
-      const k=this.downbeat?8:6,R0=S*(this.downbeat?.3:.18)*(1+this.bass),f=P.frc*.02*P.abeat*(.6+this.bass)*(this.downbeat?1.4:1),rot=this.beats*GOLDEN_ANGLE;
-      for(let i=0;i<k;i++){const a=rot+i*TAU/k,x=W/2+Math.cos(a)*R0,y=H/2-Math.sin(a)*R0;Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(i*.7+this.beats*.3,200,x/W,1-y/H,i).map(z=>z*.16*this.pulse),r*.35)}
+      const k=this.downbeat?8:6,R0=S*(this.downbeat?.3:.18)*(1+this.bass),f=P.frc*.012*P.abeat*(.6+this.bass)*(this.downbeat?1.4:1)*this.tempoK(),rot=this.beats*GOLDEN_ANGLE;
+      for(let i=0;i<k;i++){const a=rot+i*TAU/k,x=W/2+Math.cos(a)*R0,y=H/2-Math.sin(a)*R0;Input.emit(x,y,Math.cos(a)*f,Math.sin(a)*f,inkColor(i*.7+this.beats*.3,200,x/W,1-y/H,i).map(z=>z*.26*this.pulse),r*.35)}
     }
     if(UI.bands&&!UI.bands.hidden&&UI.open)for(let i=0;i<24;i++)UI.bands.children[i].style.setProperty('--l',Math.min(1,this.levels[i]*P.msn).toFixed(3));
   }

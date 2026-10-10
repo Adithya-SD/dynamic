@@ -74,14 +74,21 @@ open class MainActivity : Activity() {
 
     private val spotifyListener: (SpotifyState) -> Unit = { s -> main.post { pushSpotify(s) } }
 
-    /** Tilt: the accelerometer, pushed into the page at ~40 Hz (window.__nativeTilt in 72_tilt.js). */
+    /** Tilt: the game rotation vector (gyroscope + accelerometer fused, no compass), pushed into the page at ~40 Hz
+     *  as a quaternion (window.__nativeQuat in 72_tilt.js). Devices without one fall back to the accelerometer. */
     private var tiltT = 0L
     private val tiltListener = object : SensorEventListener {
         override fun onSensorChanged(e: SensorEvent) {
             val ms = e.timestamp / 1_000_000L
             if (ms - tiltT < 25 || !pageReady) return
             tiltT = ms
-            web.evaluateJavascript("window.__nativeTilt&&window.__nativeTilt(${e.values[0]},${e.values[1]},${e.values[2]})", null)
+            if (e.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+                web.evaluateJavascript("window.__nativeTilt&&window.__nativeTilt(${e.values[0]},${e.values[1]},${e.values[2]})", null)
+            } else {
+                val x = e.values[0]; val y = e.values[1]; val z = e.values[2]
+                val w = if (e.values.size > 3) e.values[3] else Math.sqrt(Math.max(0.0, 1.0 - (x * x + y * y + z * z).toDouble())).toFloat()
+                web.evaluateJavascript("window.__nativeQuat&&window.__nativeQuat($x,$y,$z,$w)", null)
+            }
         }
         override fun onAccuracyChanged(s: Sensor?, a: Int) {}
     }
@@ -173,7 +180,7 @@ open class MainActivity : Activity() {
         NowPlayingService.listeners.add(spotifyListener)
         pushSpotify(NowPlayingService.latest)
         if (page == "index.html") (getSystemService(Context.SENSOR_SERVICE) as SensorManager).let { sm ->
-            sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sm.registerListener(tiltListener, it, SensorManager.SENSOR_DELAY_GAME) }
+            (sm.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR) ?: sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) ?: sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER))?.let { sm.registerListener(tiltListener, it, SensorManager.SENSOR_DELAY_GAME) }
         }
     }
 

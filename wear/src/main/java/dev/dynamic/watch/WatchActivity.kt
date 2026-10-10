@@ -30,9 +30,15 @@ class WatchActivity : Activity() {
     private val tilt = object : SensorEventListener {
         override fun onSensorChanged(e: SensorEvent) {
             val ms = e.timestamp / 1_000_000L
-            if (ms - tiltT < 40 || !ready) return
+            if (ms - tiltT < 30 || !ready) return
             tiltT = ms
-            web.evaluateJavascript("window.__nativeTilt&&window.__nativeTilt(${e.values[0]},${e.values[1]},${e.values[2]})", null)
+            if (e.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+                web.evaluateJavascript("window.__nativeTilt&&window.__nativeTilt(${e.values[0]},${e.values[1]},${e.values[2]})", null)
+            } else {
+                val x = e.values[0]; val y = e.values[1]; val z = e.values[2]
+                val w = if (e.values.size > 3) e.values[3] else Math.sqrt(Math.max(0.0, 1.0 - (x * x + y * y + z * z).toDouble())).toFloat()
+                web.evaluateJavascript("window.__nativeQuat&&window.__nativeQuat($x,$y,$z,$w)", null)
+            }
         }
         override fun onAccuracyChanged(s: Sensor?, a: Int) {}
     }
@@ -92,7 +98,7 @@ class WatchActivity : Activity() {
         super.onResume()
         web.onResume()
         (getSystemService(Context.SENSOR_SERVICE) as SensorManager).let { sm ->
-            sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sm.registerListener(tilt, it, SensorManager.SENSOR_DELAY_GAME) }
+            (sm.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR) ?: sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) ?: sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER))?.let { sm.registerListener(tilt, it, SensorManager.SENSOR_DELAY_GAME) }
         }
     }
 
