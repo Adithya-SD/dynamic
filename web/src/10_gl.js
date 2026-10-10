@@ -14,7 +14,7 @@ const emptyVao=gl.createVertexArray();
 const KHR=gl.getExtension('KHR_parallel_shader_compile');
 const programs=new Map(),programTimes={};
 function startProgram(vs,fs,defs){
-  const key=vs+'|'+fs+'|'+defs.replace(/\s+/g,' ').trim();let e=programs.get(key);if(e)return e;
+  const key=vs+'|'+fs+'|'+defs;let e=programs.get(key);if(e)return e;
   const p=gl.createProgram(),sh=[[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]].map(([type,name])=>{const s=gl.createShader(type);gl.shaderSource(s,HEADER+defs+SHADERS[name]);gl.compileShader(s);gl.attachShader(p,s);return s});
   gl.linkProgram(p);e={p,sh,key,t0:performance.now(),ready:false,failed:false,u:null,error:''};programs.set(key,e);return e;
 }

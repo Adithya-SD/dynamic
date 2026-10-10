@@ -6,7 +6,7 @@
      Tilt.x / Tilt.y  flat tilt, -1..1, x right, y down (screen coordinates): perspective, tunnel, fluid pour
      Tilt.rv          the same turn as a rotation vector in radians [about x, about y, about z]: the orb rolls with it */
 const Tilt={
-  x:0,y:0,rv:[0,0,0],s:[0,0,0],v:[0,0,0],t:[0,0,0],qc:null,qr:null,src:'',seen:0,away:true,hover:false,
+  x:0,y:0,rv:[0,0,0],s:[0,0,0],v:[0,0,0],t:[0,0,0],qc:null,qr:null,src:'',seen:0,away:true,hover:false,follow:true,F:[{},{},{}],
   init(){
     // Phone browser: the W3C orientation event; the rotation matrix it describes has no gimbal lock.
     addEventListener('deviceorientation',e=>this.feedEuler(e.alpha,e.beta,e.gamma),true);
@@ -50,11 +50,22 @@ const Tilt={
     this.qc=q;this.src='gyro';this.seen=performance.now();this.away=false;
     if(!this.qr)this.qr=q.slice();
   },
+  /* One-euro filter: smooths hard while the device is nearly still (that is where sensor jitter shows) and hardly at all
+     once it moves, so it stays real time. */
+  euro(i,x,dt){
+    const f=this.F[i];if(f.x===undefined){f.x=x;f.d=0;return x}
+    const al=c=>{const r=6.2832*c*Math.max(dt,1e-3);return r/(r+1)};
+    f.d+=((x-f.x)/Math.max(dt,1e-3)-f.d)*al(1.2);
+    f.x+=(x-f.x)*al(1.5+2.4*Math.abs(f.d));
+    return f.x;
+  },
+  /* Neutral pose = where the device is now (for scrolling canvases, which never recentre: tap the tilt chip to reset it). */
+  reset(){this.qr=this.qc?this.qc.slice():null;this.t=[0,0,0];this.s=[0,0,0];this.v=[0,0,0]},
   frame(dt){
     dt=Math.min(dt,.05);
     if(this.src==='gyro'&&this.qc){
       // The neutral pose follows the device, slowly: hold a tilt and the picture drifts back to the middle.
-      const k=1-Math.exp(-dt/4.5),a=this.qr,b=this.qc,dot=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3],sg=dot<0?-1:1;
+      const k=this.follow?1-Math.exp(-dt/4.5):0,a=this.qr,b=this.qc,dot=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3],sg=dot<0?-1:1;
       const m=a.map((v,i)=>v+(b[i]*sg-v)*k),n=Math.hypot(...m);this.qr=m.map(v=>v/n);
       // Turn of the device since the neutral pose, in the neutral pose's own axes (so it means the same in any hold).
       let r=qmul(qconj(this.qr),b);if(r[3]<0)r=r.map(v=>-v);
@@ -63,10 +74,10 @@ const Tilt={
       // Landscape: the screen's right/down are not the device's.
       const o=((screen.orientation&&screen.orientation.angle)||window.orientation||0)|0,tx=u[1],ty=u[0];
       if(o===90)u=[tx,-ty,u[2]];else if(o===270||o===-90)u=[-tx,ty,u[2]];else if(o===180)u=[-ty,-tx,u[2]];
-      this.t=[u[0],u[1],u[2]*.6];
+      this.t=[this.euro(0,u[0],dt),this.euro(1,u[1],dt),this.euro(2,u[2]*.6,dt)];
     }
     // A heavy critically damped spring: it leans into the turn and settles back with some resistance.
-    const w=this.src==='mouse'?8:6.5;
+    const w=this.src==='mouse'?8:8.5;
     for(let i=0;i<3;i++){const a=-w*w*(this.s[i]-this.t[i])-2*w*this.v[i];this.v[i]+=a*dt;this.s[i]+=this.v[i]*dt}
     this.x=Math.tanh(this.s[1]/1.05);this.y=Math.tanh(this.s[0]/1.05);this.rv=this.s;
   },

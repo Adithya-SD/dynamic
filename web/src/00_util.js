@@ -13,6 +13,8 @@ const store={
 function hsv(h,s,v){h=fract(h)*6;const i=h|0,f=h-i,p=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));return[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i%6]}
 const NATIVE=window.DynamicNative||null;   // set by the Android shell; absent in a normal browser
 if(NATIVE)document.documentElement.classList.add('native');
+const PCAPP=window.DYNAMIC_PC||null;   // set by the Windows app (pc/preload.js): system-wide audio, own window controls
+if(PCAPP)document.documentElement.classList.add('pcapp');
 const WATCH=/[?&]watch/.test(location.search);   // Wear OS: the same engine without the settings sheet
 if(WATCH)document.documentElement.classList.add('watch');
 const haptic=ms=>{try{NATIVE?NATIVE.haptic(ms):navigator.vibrate&&navigator.vibrate(ms)}catch{}};
@@ -25,6 +27,7 @@ async function download(blob,name){
   const url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 async function copyText(t){if(NATIVE){NATIVE.copy(t);return}await navigator.clipboard.writeText(t)}
+const ease=t=>t*t*(3-2*t);
 const svgIcon=(d,cls='')=>`<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true"><path d="${d}"/></svg>`;
 let noteTimer=0;
 function notice(text,ms=5000){const n=$('#note');n.textContent=text;n.hidden=false;UI&&(UI.layoutDirty=true);clearTimeout(noteTimer);noteTimer=setTimeout(()=>{n.hidden=true;UI&&(UI.layoutDirty=true)},ms)}

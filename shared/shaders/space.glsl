@@ -23,6 +23,8 @@ uniform vec2 uTilt;     // 3D tilt of the plane (gyro or mouse), already weighte
 uniform vec2 uMobBg;    // the same, for the backdrop around the ball (tilt walks it: parallax)
 uniform float uOrb;     // ball radius in short-side units; 0 = flat
 uniform float uPulse;   // the frame swells by this fraction on every hit
+uniform vec2 uCam;      // infinite / wrap canvas: where the camera looks on the sheet (sheet uv)
+uniform float uPeriodic;// 1: the sheet repeats seamlessly (infinite and wrap canvases) instead of mirroring at its edges
 uniform mat3 uOrbM;     // view-space normal -> normal on the ball's own surface
 uniform int uLoop;      // fold iteration cap; a uniform bound keeps D3D shader compilers from unrolling
 float gParity;          // number of mirror flips; tints alternate tiles
@@ -96,7 +98,11 @@ vec2 spaceMapFlat(vec2 fc){
   q*=1.-uPulse;
   q/=max(.3,1.+dot(q,uTilt));   // perspective foreshortening of the tilted plane
   gParity=0.;
-  return foldFlat(q);
+  vec2 r=foldFlat(q);
+#if SPACE<=1
+  r+=uCam;   // plain and kaleidoscope look around the sheet; the others scroll through their own parameters
+#endif
+  return r;
 }
 vec2 spaceMapBall(vec2 fc){
   float sh=min(uRes.x,uRes.y);
@@ -109,4 +115,11 @@ vec2 spaceMap(vec2 fc){
   if(uOrb>0.){float sh=min(uRes.x,uRes.y);if(length(fc-.5*uRes)<uOrb*sh)return spaceMapBall(fc);}
   return spaceMapFlat(fc);
 }
-vec2 spaceUV(vec2 fc){return mirrorWrap(spaceMap(fc));}
+// Where the sheet ends: mirrored (so nothing samples off the edge) or, on an endless / wrapping canvas, repeated.
+vec2 wrapUV(vec2 m){
+#if SPACE<=1
+  if(uPeriodic>.5)return fract(m);
+#endif
+  return mirrorWrap(m);
+}
+vec2 spaceUV(vec2 fc){return wrapUV(spaceMap(fc));}

@@ -1,0 +1,9 @@
+{
+  "name": "dynamic",
+  "productName": "Dynamic",
+  "version": "1.0.0",
+  "description": "Dynamic for Windows: the fluid-art engine as a full-screen app with the whole GPU, system-wide audio and no browser in the way.",
+  "main": "main.js",
+  "author": "Dynamic",
+  "license": "MIT"
+}

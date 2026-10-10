@@ -5,7 +5,7 @@ const App={
   ready:null,
   async start(){
     let done;this.ready=new Promise(r=>done=r);
-    Engine.init();Geo.init();restore();Engine.wrap=!!P.edges;
+    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||P.cvs);this.cvsSeen=P.cvs|0;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
     UI.build();Input.init();Tilt.init();Music.init();PadPlay.init();if(WATCH)Watch.init();
@@ -21,7 +21,9 @@ const App={
     document.addEventListener('visibilitychange',()=>{this.last=performance.now();Music.events.length=0});
     document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,select'))return;
       if(e.code==='Space'){e.preventDefault();$('#kz').click()}else if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();$('#ku').click()}
-      else if(e.key==='/'){e.preventDefault();if(!UI.open)UI.show(UI.lastTab);$('#q').focus()}else if(e.key==='Escape'&&UI.open)UI.shut()});
+      else if(e.key==='/'){e.preventDefault();if(!UI.open)UI.show(UI.lastTab);$('#q').focus()}else if(e.key==='Escape'&&UI.open)UI.shut();
+      else if(e.key==='ArrowRight'){UI.cycle(1);notice(allPresets()[current].n,1200)}else if(e.key==='ArrowLeft'){UI.cycle(-1);notice(allPresets()[current].n,1200)}
+      else if(e.key==='Tab'){e.preventDefault();UI.open?UI.shut():UI.show(UI.lastTab)}else if(e.key==='h'||e.key==='H'){UI.hidden||UI.dissolving?UI.wake():UI.hideNow()}});
     cv.addEventListener('webglcontextlost',e=>{e.preventDefault();this.lost=true;notice('Graphics were reset by the system. Reload to continue; your settings are saved.',60000)});
     requestAnimationFrame(t=>this.frame(t));done();
     Engine.warmRest();
@@ -36,6 +38,8 @@ const App={
     clock+=dt;stepMorph(dt);
     if(P.cyc&&!this.paused&&(this.cycT=(this.cycT||0)+dt)>20){this.cycT=0;UI.cycle()}
 
+    if((P.cvs|0)!==this.cvsSeen){this.cvsSeen=P.cvs|0;Engine.setWrap(!!(P.edges||P.cvs));if(!Engine.allocate(quality()))notice(Engine.error)}   // the world is 1.8x the screen on endless and wrapping canvases
+    Tilt.follow=Space.mode!==1;   // an endless canvas scrolls with the tilt and never recentres
     if(WATCH&&P.auto<.45)P.auto=.45;   // a watch has nobody drawing on it all day: it paints itself
     const gq=Gov.begin();
     Music.frame(dt);
@@ -45,7 +49,6 @@ const App={
     Space.update(E,this.paused?0:dt,Engine.res,Engine.world,P.aspace*(energy*.4+beat*.5),tl,Tilt.rot(P),E.zp);
     PadPlay.frame(dt);
     Input.frame(dt);
-    UI.depositStep();
     Engine.flushStamps(P.bt);
 
     const L=this.look;
@@ -56,12 +59,13 @@ const App={
     {const a=E.lgt*Math.PI/180;L.orbL=[Math.cos(a)*.7,Math.sin(a)*.7,.75];L.orbRim=paletteRGB(hueBase+E.hr*.35).map(z=>z*.6)}
     L.echoZoom=E.ezoom*.012*dt*60*(1+P.aspace*beat);L.echoTwist=E.etwist*.02*dt*60;L.echoCenter=[tl[0]*.1,tl[1]*.1];L.time=clock;
     if(!this.paused){
-      const sim=dt*P.ts*musicSpeed,n=Math.min(3,Math.ceil(sim/(1/60)-1e-6)),h=sim/Math.max(n,1);
+      const sim=dt*P.ts*musicSpeed,n=this.fps&&this.fps<40?1:Math.min(3,Math.ceil(sim/(1/60)-1e-6)),h=sim/Math.max(n,1);   // a slow device takes one bigger step instead of three: no death spiral
       const pr=Tilt.pour(P),g=[P.wx+pr[0],P.wy+pr[1]];
       const field={mode:E.field|0,str:E.fs*500*(1+P.afield*(Music.bass*2.5+beat)),g,time:clock};
       Geo.inject(dt,E);
       for(let i=0;i<n;i++)Engine.step(h,E,field);
     }
+    Engine.uiStep(dt,dt*P.ts*musicSpeed);
     const ps=Input.ptr.size?[...Input.ptr.values()][0]:null,emit=ps?[Input.emitAt[0],Input.emitAt[1],1,.06]:[0,0,0,0];
     Engine.particles(dt*P.ts*Math.min(1,musicSpeed),E,emit,clock,paletteUniforms(),this.paused,dt);
     UI.frame(dt);

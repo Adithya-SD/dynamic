@@ -11,7 +11,8 @@ const Gov={
   LEVELS:[[1,1,1,1,.9],[.85,.85,.875,.85,.8],[.72,.72,.75,.7,.7],[.62,.6,.625,.6,.6],[.52,.5,.5,.5,.6],[.44,.45,.44,.45,.6]],
   auto(){return!P.qual},
   lvl(){return this.auto()?this.level:[0,0,1,3,4,5][P.qual|0]},
-  quality(Q){const L=this.LEVELS[this.lvl()];return{...Q,rscale:Q.rscale*L[0],inkq:Q.inkq*L[1],sim:Math.max(96,Math.round(Q.sim*L[2]/16)*16),pq:L[4]}},
+  /* An endless or wrapping canvas simulates a world 1.8x the screen across; its cells are a little coarser to pay for it. */
+  quality(Q){const L=this.LEVELS[this.lvl()],c=P.cvs?.8:1;return{...Q,rscale:Q.rscale*L[0],inkq:Q.inkq*L[1]*c,sim:Math.max(96,Math.round(Q.sim*L[2]*c/16)*16),world:P.cvs?1.8:Q.world,pq:L[4]}},
   iters(dt){const L=this.LEVELS[this.lvl()][3];return Math.max(6,Math.round(P.it*L*Math.min(1,dt*60*1.1+.25)))},
   /* Every rAF timestamp, drawn or not: the median interval is the display refresh. */
   raf(now){if(this.tLast){const d=now-this.tLast;this.lastD=Math.max(d,(this.lastD||0)*.9);if(d>2&&d<250){this.iv.push(d);if(this.iv.length>90)this.iv.shift()}}this.tLast=now;

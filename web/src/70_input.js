@@ -7,15 +7,15 @@ const Input={
   init(){
     cv.addEventListener('pointerdown',e=>{
       UI.lastInput=performance.now();
-      if(UI.hidden||UI.dissolving&&UI.dissolve>.3){UI.wake();return}
-      if(UI.open&&UI.touch){UI.shut()}
+      // Drawing always works, menu or no menu: a touch never closes the menu and is never swallowed to wake it.
       if(!this.ptr.size)Engine.snapshot();
       cv.setPointerCapture(e.pointerId);
-      const id=++strokeCount;this.ptr.set(e.pointerId,{x:e.clientX,y:e.clientY,fx:e.clientX,fy:e.clientY,o:Math.random()*6,t:0,h:0,id});
+      const id=++strokeCount;this.ptr.set(e.pointerId,{x:e.clientX,y:e.clientY,fx:e.clientX,fy:e.clientY,o:Math.random()*6,t:0,h:0,id,t0:performance.now(),x0:e.clientX,y0:e.clientY,far:false});
       this.taps.push([e.clientX,e.clientY,(Math.random()-.5)*900,(Math.random()-.5)*900,Math.random()*6,id]);morph=null;
     });
-    cv.addEventListener('pointermove',e=>{const p=this.ptr.get(e.pointerId);if(p){p.x=e.clientX;p.y=e.clientY;UI.lastInput=performance.now()}});
-    const up=e=>{this.ptr.delete(e.pointerId);UI.lastInput=performance.now()};
+    cv.addEventListener('pointermove',e=>{const p=this.ptr.get(e.pointerId);if(p){p.x=e.clientX;p.y=e.clientY;UI.lastInput=performance.now();if(Math.hypot(p.x-p.x0,p.y-p.y0)>10)p.far=true}});
+    // A quick tap brings a hidden interface back; dragging keeps drawing with it out of the way.
+    const up=e=>{const p=this.ptr.get(e.pointerId);if(p&&!p.far&&performance.now()-p.t0<280&&(UI.hidden||UI.dissolving))UI.wake();this.ptr.delete(e.pointerId);UI.lastInput=performance.now()};
     cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
     addEventListener('contextmenu',e=>{if(e.target===cv)e.preventDefault()});
     addEventListener('devicemotion',e=>{const a=e.accelerationIncludingGravity;if(a)this.gv=[this.gv[0]*.9+(a.x||0)*.1,this.gv[1]*.9+(a.y||0)*.1]});

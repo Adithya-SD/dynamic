@@ -105,3 +105,27 @@ H.live=async function(url,{preset='Flower of Life',start=0,snaps=[],dur=20,name=
     if(k<snaps.length&&st>=snaps[k]){await this.snap(name+'_'+k,640);shots.push(st.toFixed(1));k++}}
   await audio.stop();return{shots,rows:rows.filter((_,j)=>j%2===0)};
 };
+/* GPU time per full-screen pass (by shader), plus particles: where the frame goes. */
+H.passes=async function(preset,n=20){
+  const ext=gl.getExtension('EXT_disjoint_timer_query_webgl2');if(!ext)return'no timer ext';
+  this.prep(preset);this.stroke(40);this.run(60);
+  const orig=pass,qs=[];
+  window.pass=function(fs,v,t,d){const q=gl.createQuery();gl.beginQuery(ext.TIME_ELAPSED_EXT,q);orig(fs,v,t,d);gl.endQuery(ext.TIME_ELAPSED_EXT);qs.push([fs.replace('.frag',''),q])};
+  for(let i=0;i<n;i++){this.run(1);const f=qs.length;}
+  const pq=gl.createQuery();
+  window.pass=orig;
+  await new Promise(r=>setTimeout(r,400));const t={},c={};
+  for(const[k,q]of qs){for(let w=0;w<80&&!gl.getQueryParameter(q,gl.QUERY_RESULT_AVAILABLE);w++)await new Promise(r=>setTimeout(r,20));t[k]=(t[k]||0)+gl.getQueryParameter(q,gl.QUERY_RESULT)/1e6/n;c[k]=(c[k]||0)+1/n;gl.deleteQuery(q)}
+  const rows=Object.entries(t).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v.toFixed(2)+'ms x'+Math.round(c[k]));
+  const tot=Object.values(t).reduce((a,b)=>a+b,0);
+  return{preset,res:Engine.res,sim:Engine.sim,ink:Engine.ink,gpu:gl.getParameter(gl.RENDERER).slice(0,50),total:+tot.toFixed(2),rows};
+};
+/* CPU time per frame section (ms), measuring JavaScript + GL command submission only. */
+H.cpu=function(preset,n=120){
+  this.prep(preset);this.stroke(30);this.run(40);
+  const T={},wrap=(o,k,name)=>{const f=o[k];o[k]=function(...a){const t=performance.now();const r=f.apply(this,a);T[name]=(T[name]||0)+performance.now()-t;return r}};
+  const w=[[Engine,'step','sim'],[Engine,'particles','particles'],[Engine,'render','render'],[Engine,'flushStamps','stamps'],[Music,'frame','music'],[Input,'frame','input'],[Director,'apply','director'],[Space,'update','space'],[UI,'frame','ui.frame'],[UI,'glass','ui.glass'],[Geo,'inject','geo'],[Exposure,'sample','exposure'],[Tilt,'frame','tilt'],[Trans,'watch','trans'],[Engine,'uiStep','uiStep']];
+  w.forEach(([o,k,nm])=>wrap(o,k,nm));
+  const t0=performance.now();this.run(n);const tot=(performance.now()-t0)/n;
+  const o={preset,total:+tot.toFixed(2)};for(const k in T)o[k]=+(T[k]/n).toFixed(3);return o;
+};

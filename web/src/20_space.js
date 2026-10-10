@@ -4,8 +4,8 @@
 const TAU=Math.PI*2,PHI=(1+Math.sqrt(5))/2;
 const mirror1=x=>1-Math.abs(((x%2)+2)%2-1);
 const Space={
-  spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,orbT:0,orbR:[1,0,0,0,1,0,0,0,1],
-  u:{uLoop:48,uOrb:0,uPulse:0,uOrbM:[1,0,0,0,1,0,0,0,1],uMobBg:[0,0],uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
+  spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,orbT:0,cam:[0,0],pshift:[0,0],sph:[0,0],hypM:[0,0],mode:0,orbR:[1,0,0,0,1,0,0,0,1],
+  u:{uLoop:48,uCam:[0,0],uPeriodic:0,uOrb:0,uPulse:0,uOrbM:[1,0,0,0,1,0,0,0,1],uMobBg:[0,0],uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
   hyperbolic(p,q){
     p=Math.round(p);q=Math.round(q);
     if((p-2)*(q-2)<=4)q=Math.floor(2+4/(p-2))+1;
@@ -25,14 +25,31 @@ const Space={
     this.phase[0]+=d*dt*.5;this.phase[1]-=d*dt*.35;
     this.poleT+=dt*(.05+Math.abs(d)*.08);
     u.uSpace=P.space|0;u.uRes=res;u.uWorld=world;u.uSegs=P.kal;u.uDepth=P.foldDepth;u.uSpin=this.spin;u.uTile=P.tile;
-    const hw=([.9,.6,.5,.3,.4,.4][u.uSpace]||.5)*(P.orb>0?.3:1);u.uTilt=[tl[0]*hw,tl[1]*hw];
-    u.uShift=u.uSpace===2?[this.shift[0]+tl[0]*.35,this.shift[1]+tl[1]*.35]:this.shift;
+    /* Canvas: 0 Window (tilt leans the picture), 1 Infinite (tilt is a joystick: the camera scrolls for ever over a world that
+       repeats), 2 Wrap (tilt looks around a finite world whose edges wrap). A ball always takes the tilt itself. */
+    const cvs=P.cvs|0,mode=P.orb>0?0:cvs;this.mode=mode;u.uPeriodic=cvs?1:0;
+    const pos=mode===1?[0,0]:tl;   // position-like tilt (Window and Wrap)
+    if(mode===1&&dt>0){
+      const sp=(P.cspd||1)*.45,vx=tl[0]*sp,vy=tl[1]*sp,sh=Math.min(res[0],res[1]),c=Math.cos(this.spin),s=Math.sin(this.spin),tile=Math.max(P.tile,.05);
+      this.cam[0]=(this.cam[0]+vx*dt*sh/res[0]/world)%1;this.cam[1]=(this.cam[1]+vy*dt*sh/res[1]/world)%1;
+      this.pshift[0]+=(c*vx-s*vy)*dt/tile;this.pshift[1]+=(s*vx+c*vy)*dt/tile;
+      this.sph[0]+=vx*dt*.7;this.sph[1]+=vy*dt*.7;
+      // hyperbolic: add a small hyperbolic translation to where we stand (Möbius addition keeps us inside the disk)
+      const dx=vx*dt*.9,dy=vy*dt*.9,[mx,my]=this.hypM,nx=mx+dx,ny=my+dy,ex=1+dx*mx+dy*my,ey=dx*my-dy*mx,dd=Math.max(ex*ex+ey*ey,1e-9);
+      let hx=(nx*ex+ny*ey)/dd,hy=(ny*ex-nx*ey)/dd;const hl=Math.hypot(hx,hy);if(hl>.86){hx*=.86/hl;hy*=.86/hl}this.hypM=[hx,hy];
+    }
+    const pr=(1-1/Math.max(world,1))/2*.9;
+    u.uCam=mode===1?this.cam:mode===2?[tl[0]*pr,tl[1]*pr]:[0,0];
+    const hw=mode?0:([.9,.6,.5,.3,.4,.4][u.uSpace]||.5)*(P.orb>0?.3:1);u.uTilt=[tl[0]*hw,tl[1]*hw];
+    u.uShift=u.uSpace===2?(mode===1?[this.shift[0]+this.pshift[0],this.shift[1]+this.pshift[1]]:[this.shift[0]+pos[0]*.35,this.shift[1]+pos[1]*.35]):this.shift;
     if(u.uSpace===3){const h=this.hyperbolic(P.hp,P.hq);u.uHyp=h.hyp;u.uHypOff=h.off;const m=Math.min(.62,Math.abs(P.drift)*.7);
       const lim=(x,y)=>{const l=Math.hypot(x,y);return l>.86?[x*.86/l,y*.86/l]:[x,y]};
-      const amb=lim(m*Math.cos(this.mobA),m*Math.sin(this.mobA)),bg=lim(amb[0]+tl[0]*.55,amb[1]+tl[1]*.55);
+      const amb=lim(m*Math.cos(this.mobA),m*Math.sin(this.mobA));
+      let bg;if(mode===1){const[hx,hy]=this.hypM,[ax,ay]=amb,nx=ax+hx,ny=ay+hy,ex=1+hx*ax+hy*ay,ey=hx*ay-hy*ax,dd=Math.max(ex*ex+ey*ey,1e-9);bg=lim((nx*ex+ny*ey)/dd,(ny*ex-nx*ey)/dd)}
+      else bg=lim(amb[0]+pos[0]*.55,amb[1]+pos[1]*.55);
       u.uMobBg=bg;u.uMob=P.orb>0?amb:bg}   // tilting walks you through the tiling; round a ball it turns the ball instead (the backdrop still walks)
     this.orb(P,dt,res,rv);
-    const g=Math.max(1.01,P.growth),lnS=Math.log(g);u.uSpiral=[lnS/TAU,lnS,Math.max(1,Math.round(P.arms)),0];u.uSpiralPhase=[this.phase[0]+tl[0]*.6,this.phase[1]+tl[1]*.6];
+    const g=Math.max(1.01,P.growth),lnS=Math.log(g);u.uSpiral=[lnS/TAU,lnS,Math.max(1,Math.round(P.arms)),0];u.uSpiralPhase=mode===1?[this.phase[0]+this.sph[0],this.phase[1]+this.sph[1]]:[this.phase[0]+pos[0]*.6,this.phase[1]+pos[1]*.6];
     const ar=res[0]/res[1],gx=(.5-1/PHI/PHI)*Math.max(ar,1),gy=(.5-1/PHI/PHI)*Math.max(1/ar,1),w=this.poleT;
     u.uPoles=[-gx+.03*Math.cos(w),gy+.03*Math.sin(w*1.3),gx+.03*Math.cos(w*.8+2),-gy+.03*Math.sin(w+1)];
   },
@@ -78,11 +95,11 @@ const Space={
   flat(qx,qy){
     const u=this.u,R=u.uRes,sh=Math.min(R[0],R[1]);
     const rot=(x,y,a)=>{const c=Math.cos(a),s=Math.sin(a);return[c*x-s*y,s*x+c*y]};
-    const sheet=(x,y)=>[.5+x*sh/R[0]/u.uWorld,.5+y*sh/R[1]/u.uWorld];
+    const sheet=(x,y)=>[.5+x*sh/R[0]/u.uWorld,.5+y*sh/R[1]/u.uWorld],add=p=>[p[0]+u.uCam[0],p[1]+u.uCam[1]];
     switch(u.uSpace){
       case 1:{[qx,qy]=rot(qx,qy,u.uSpin);const w=TAU/Math.max(2,Math.floor(u.uSegs));let r=Math.hypot(qx,qy),a=Math.atan2(qy,qx);
         for(let j=0;j<5&&j<u.uDepth;j++){const m=((a+j*w*.37)%w+w)%w;a=Math.abs(m-w*.5);if(j>0)r*=1.18}
-        return sheet(r*Math.cos(a),r*Math.sin(a))}
+        return add(sheet(r*Math.cos(a),r*Math.sin(a)))}
       case 2:{[qx,qy]=rot(qx,qy,u.uSpin);const t=Math.max(u.uTile,.05);let x=qx/t+.5+u.uShift[0],y=qy/t+.2887+u.uShift[1];
         for(let i=0;i<48;i++){let inside=true;if(y<0){y=-y;inside=false}
           let d=x*.8660254-y*.5;if(d<0){x-=2*d*.8660254;y+=2*d*.5;inside=false}
@@ -96,9 +113,9 @@ const Space={
         const[k,lnS,arms]=u.uSpiral,lr=Math.log(Math.max(Math.hypot(zx,zy),1e-6)),th=Math.atan2(zy,zx),s=lr-k*th;
         return[arms*s/(Math.PI*k)+u.uSpiralPhase[0],2*lr/(lnS*Math.max(u.uTile,.05))+u.uSpiralPhase[1]]}
     }
-    return sheet(qx,qy);
+    return add(sheet(qx,qy));
   },
-  uv(fx,fy){const m=this.map(fx,fy);return[mirror1(m[0]),mirror1(m[1])]},
+  uv(fx,fy){const m=this.map(fx,fy),u=this.u;return u.uPeriodic&&u.uSpace<2?[fract(m[0]),fract(m[1])]:[mirror1(m[0]),mirror1(m[1])]},
   /* Map a CSS-pixel brush sample. Returns sheet uv, local scale and the velocity carried into sheet space.
      Velocity (vx,vy) is screen-space, y up, in reference cells/s. */
   brush(x,y,vx,vy){

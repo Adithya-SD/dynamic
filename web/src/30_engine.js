@@ -35,12 +35,12 @@ const Engine={
   /* Compile everything the first frame needs, in parallel. Other spaces follow quietly, one at a time. */
   async warm(onProgress){
     const d=this.spaceDefs(Space.u.uSpace),list=this.BASE.filter(([,f])=>f!=='compose.frag').map(x=>[...x,'']);
-    list.push(['fullscreen.vert','compose.frag',d],['deposit.vert','deposit.frag',d]);
-    const errors=await warmPrograms(list,onProgress);this.live.compose=this.live.deposit=d;return errors;
+    list.push(['fullscreen.vert','compose.frag',d]);
+    const errors=await warmPrograms(list,onProgress);this.live.compose=d;return errors;
   },
-  async warmAll(){const l=[];for(let n=0;n<6;n++){const d=this.spaceDefs(n);l.push(['fullscreen.vert','compose.frag',d],['deposit.vert','deposit.frag',d])}return warmPrograms(l)},
+  async warmAll(){const l=[];for(let n=0;n<6;n++){const d=this.spaceDefs(n);l.push(['fullscreen.vert','compose.frag',d],['fullscreen.vert','uiflow.frag',d])}return warmPrograms(l)},
   async warmRest(){
-    for(let n=0;n<6;n++){const d=this.spaceDefs(n);for(const[vs,fs]of[['fullscreen.vert','compose.frag'],['deposit.vert','deposit.frag']]){const e=startProgram(vs,fs,d);while(!e.ready&&!e.failed){await new Promise(r=>setTimeout(r,100));if(compileDone(e))finishProgram(e)}}}
+    for(let n=0;n<6;n++){const d=this.spaceDefs(n);for(const[vs,fs]of[['fullscreen.vert','compose.frag'],['fullscreen.vert','uiflow.frag']]){const e=startProgram(vs,fs,d);while(!e.ready&&!e.failed){await new Promise(r=>setTimeout(r,100));if(compileDone(e))finishProgram(e)}}}
   },
   /* Sizes from quality. Render = CSS px × min(DPR,2) × scale. Sheet keeps screen aspect. */
   sizes(Q){
@@ -152,8 +152,8 @@ const Engine={
     }
     if(toScreen)this.lastFrame={base,bloom:bloomTex,amt:bloomAmt};
     const dp=res[0]/VW();
-    pass('final.frag',{...Trans.uniforms(look),uImg:base,uBloom:bloomTex,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dof,uBlack:P.blk>0?.008+P.blk*.34:0,uSharp:P.shp,uRes:res,uBloomAmt:bloomAmt,uVig:P.vig,uContrast:P.ctr,uGrain:P.grain,uLens:P.lens,uTime:look.time,uDp:dp,
-      uR:glass.R,uQ:glass.Q,uX:glass.X,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:P.blr,uBezel:P.bzl,uDisp:P.dsp},out);
+    pass('final.frag',{...Trans.uniforms(look),uUi:this.ui.on?this.ui.r:this.black,uUiA:this.ui.on?this.ui.a:0,uImg:base,uBloom:bloomTex,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dof,uBlack:P.blk>0?.008+P.blk*.34:0,uSharp:P.shp,uRes:res,uBloomAmt:bloomAmt,uVig:P.vig,uContrast:P.ctr,uGrain:P.grain,uLens:P.lens,uTime:look.time,uDp:dp,
+      uR:glass.R,uQ:glass.Q,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:P.blr,uBezel:P.bzl,uDisp:P.dsp},out);
   },
   /* Clean frame (no interface) read straight from an offscreen target: works even when the page is not being presented. */
   capture(P,look,glass){
@@ -164,15 +164,21 @@ const Engine={
     const c=el('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(new ImageData(px,w,h),0,0);return c;
   },
 
-  deposit(mask,progress,prev,ptSize){
-    const prog=program('deposit.vert','deposit.frag',this.variant('deposit.vert','deposit.frag','deposit'));gl.useProgram(prog.p);
-    const cols=Math.ceil(VW()/4),rows=Math.ceil(VH()/4);
-    gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(emptyVao);
-    for(const[kind,t]of[[0,this.vel.r],[1,this.dye.r]]){
-      setUniforms(prog,{...Space.u,uMask:mask,uCss:[VW(),VH()],uCols:cols,uProgress:progress,uPrev:prev,uPointSize:Math.max(2,ptSize*t.w/this.res[0]*Math.min(devicePixelRatio||1,2)),uKind:kind});
-      bindOut(t);gl.drawArrays(gl.POINTS,0,cols*rows);
-    }
-    gl.disable(gl.BLEND);
+  /* Interface ink: when the interface dissolves, a picture of it becomes a layer that the fluid carries (uiflow.frag).
+     Still water leaves it intact; flow pushes it away and smears it. begin(mask) takes the picture, step() advects it. */
+  ui:{r:null,w:null,on:false,a:0,decay:.25,age:0,rel:0},
+  uiBegin(mask){
+    const u=this.ui,w=Math.round(VW()),h=Math.round(VH());
+    if(!u.r||u.r.w!==w||u.r.h!==h){kill(u.r);kill(u.w);u.r=target(w,h,'rgba16f');u.w=target(w,h,'rgba16f')}
+    pass('copy.frag',{uSrc:mask,uScale:1},u.r);u.on=true;u.age=0;u.decay=.25;u.a=0;u.rel=0;
+  },
+  uiRelease(){const u=this.ui;if(u.on){u.decay=7;u.rel=.6}},
+  uiStep(dt,simDt){
+    const u=this.ui;if(!u.on)return;
+    u.age+=dt;if(u.rel&&(u.rel-=dt)<=0||u.age>20){u.on=false;kill(u.r);kill(u.w);u.r=u.w=null;return}
+    if(App.paused)return;
+    pass('uiflow.frag',{...Space.u,uPrev:u.r,uVel:this.vel.r,uRefTx:this.refTx(),uUiRes:[u.r.w,u.r.h],uDt:simDt,uFade:u.decay*dt},u.w,this.variant('fullscreen.vert','uiflow.frag','uiflow'));
+    const t=u.r;u.r=u.w;u.w=t;
   },
   snapshot(){
     const used=[...liveTargets].reduce((s,t)=>s+t.bytes,0),need=this.dye.r.w*this.dye.r.h*8;

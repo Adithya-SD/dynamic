@@ -67,6 +67,8 @@
     {"k":"etwist","tab":"space","g":"Echo","l":"Echo twist","min":-1,"max":1,"st":0.01,"d":0,"when":{"echo":"on"}},
     {"k":"orb","tab":"space","g":"Ball","l":"Ball (3D)","min":0,"max":1,"st":0.01,"d":0,"help":"Wraps the picture round a 3D ball in front of an endless backdrop. Tilt the phone or hover the mouse to roll it."},
     {"k":"odepth","tab":"space","g":"Ball","l":"Depth","min":0,"max":1,"st":0.01,"d":0.7,"when":{"orb":"on"},"help":"Lighting on the ball, glow round it and blur behind it."},
+    {"k":"cvs","tab":"space","g":"Canvas","l":"Canvas","t":"c","o":["Window","Infinite","Wrap"],"d":0,"help":"Window: the picture fills the screen. Infinite: an endless world; tilt the phone (or move the mouse) to fly over it, it never recentres. Wrap: a finite world whose edges wrap round; tilt to look around inside it."},
+    {"k":"cspd","tab":"space","g":"Canvas","l":"Scroll speed","min":0.2,"max":3,"st":0.05,"d":1,"preset":false,"when":{"cvs":[1]}},
     {"k":"field","tab":"motion","g":"Field","l":"Field","t":"c","o":["None","Torus","Vortex","Golden spiral","Poles","Breath"],"d":0},
     {"k":"fs","tab":"motion","g":"Field","l":"Field strength","min":0,"max":1,"st":0.01,"d":0.4,"when":{"field":"on"}},
     {"k":"fsc","tab":"motion","g":"Field","l":"Field scale","min":0.3,"max":2,"st":0.01,"d":1,"when":{"field":"on"}},

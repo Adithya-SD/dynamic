@@ -41,7 +41,7 @@ void main(){
     float m=1.-smoothstep(1.-e,1.+e,r),dp=uOrbDepth;
     vec3 zb=vec3(0.),zf=vec3(0.);
     if(m>0.){
-      vec2 uv=mirrorWrap(spaceMapBall(gl_FragCoord.xy));
+      vec2 uv=wrapUV(spaceMapBall(gl_FragCoord.xy));
       zb=sceneAt(uv,gParity);
       vec3 N=gOrbN,Lg=normalize(uOrbL),H=normalize(Lg+vec3(0.,0.,1.));
       float df=max(dot(N,Lg),0.),fres=pow(1.-N.z,2.6),sp=pow(max(dot(N,H),0.),48.);
@@ -50,7 +50,7 @@ void main(){
       zb=zb*lit+rim*fres*dp*1.1+sp*dp*.45*(zb+.12);
     }
     if(m<1.){
-      vec2 uv=mirrorWrap(spaceMapFlat(gl_FragCoord.xy));
+      vec2 uv=wrapUV(spaceMapFlat(gl_FragCoord.xy));
       zf=sceneAt(uv,gParity);
       zf*=1.-.62*dp;   // the backdrop sits far behind: dimmer
       zf+=hueRotate(uOrbRim,uHue)*exp(-max(r-1.,0.)*7.)*.35*dp;   // glow spilling round the ball

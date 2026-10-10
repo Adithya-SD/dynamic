@@ -2,7 +2,7 @@
 UI={
   tab:-1,lastTab:1,scroll:{},open:false,layoutDirty:true,rows:[],upd:[],armed:null,armTimer:0,touch:false,
   sel:null,selV:[0,0,0,0],selT:null,
-  dissolve:0,dissolving:false,hidden:false,waking:false,deposited:0,mask:null,lastInput:performance.now(),
+  dissolve:0,dissolving:false,hidden:false,waking:false,mask:null,lastInput:performance.now(),
   build(){
     this.G=[$('#ttl'),$('#sh'),$('#dock'),$('#dlg'),$('#note')];
     const tabs=$('#tabs'),bd=$('#bd');
@@ -26,7 +26,7 @@ UI={
       if(id==='system')this.buildSystem(panel);
     }
     this.buildDock();
-    this.hudEl=el('div');this.hudEl.id='hud';$('#sh').insertBefore(this.hudEl,$('#tabs'));
+    this.hudEl=el('div');this.hudEl.id='hud';$('#sh').insertBefore(this.hudEl,$('#tabs'));this.hudEl.addEventListener('click',e=>{if(e.target.closest('.tc')){Tilt.reset();notice('Tilt neutral set to how you hold it now.',1800)}});
     $('#q').addEventListener('input',()=>this.search());
     $('#q').addEventListener('keydown',e=>{if(e.key==='Escape'){$('#q').value='';this.search()}});
     bd.addEventListener('scroll',()=>{this.layoutDirty=true;if(this.armed&&!this.armed.dragging)this.disarm()},{passive:true});
@@ -42,7 +42,7 @@ UI={
     const sec={calm:'Calm',build:'Build-up',full:'Full'}[M.section.state]||'';
     const lock=M.conf>.55?'locked':M.conf>.25?'finding':'free';
     const src=M.native?'Phone audio':{mic:'Mic',desktop:'Tab audio',file:'File',stream:'Stream'}[audio.state]||'';
-    if(this.hudEl)this.hudEl.innerHTML=`<span><b>${fps}</b> fps <em>/ ${hz}</em></span><span>${Gov.label()}</span>`+(Tilt.src?`<span title="Tilt source">⟲ ${Tilt.src}</span>`:'')+
+    if(this.hudEl)this.hudEl.innerHTML=`<span><b>${fps}</b> fps <em>/ ${hz}</em></span><span>${Gov.label()}</span>`+(Tilt.src?`<span title="Tilt source: tap to set the neutral pose" class="tc">⟲ ${Tilt.src}${Space.mode===1?' · scroll':''}</span>`:'')+
       (on?`<span class="bpm ${lock}"><i></i><b>${M.bpm?Math.round(M.bpm):'—'}</b> bpm</span><span>${sec}${M.drop>.3?' · <b>DROP</b>':''}</span><span>${src}</span>`:'<span class="dim">No music · Music tab → Listen to</span>');
     $('#fps').textContent=P.st?(on&&M.bpm?Math.round(M.bpm)+' bpm · ':'')+fps+' fps':'';
   },
@@ -129,7 +129,7 @@ UI={
   change(k,v){
     const old=P[k];P[k]=v;morph=null;
     if(PDEF[k].quality){if(!Engine.allocate(quality())){P[k]=old;notice(Engine.error)}}
-    if(k==='edges')Engine.setWrap(!!v);
+    if(k==='edges')Engine.setWrap(!!(v||P.cvs));
     persist();this.sync();
   },
   sync(){for(const f of this.upd)f();if(this.searching)this.search()},
@@ -191,7 +191,7 @@ UI={
     $('#pn').textContent=pr.n;this.about.textContent=pr.about||(pr.c==='Mine'?'Your preset.':pr.c==='Classic'?'Original Dynamics 8 preset.':'');
     this.favBtn.textContent=(favorites.has(pr.n)?'★':'☆')+' Favorite';this.delBtn.hidden=current<BUILTIN;
     [...$('#pg').children].forEach(c=>c.classList.toggle('on',c.getAttribute('aria-label')==='Load '+pr.n));
-    if(Engine.vel)Engine.setWrap(!!P.edges);
+    if(Engine.vel)Engine.setWrap(!!(P.edges||P.cvs));
     this.sync();
   },
   cycle(d=1){const list=allPresets(),pool=list.map((p,i)=>i).filter(i=>favorites.size?favorites.has(list[i].n):list[i].c!=='Classic');let i=pool.indexOf(current);if(i<0)i=d>0?-1:0;const n=pool[(i+d+pool.length)%pool.length];applyPreset(n,{animate:true})},
@@ -211,7 +211,7 @@ UI={
     const pick=(label,kind,fn)=>{const b=el('button','ch');b.textContent=label;b.dataset.kind=kind;b.onclick=async()=>{try{await fn()}catch(e){notice(e.message||String(e))}};src.append(b)};
     pick('Off','off',()=>{if(NATIVE)NATIVE.stopPlaybackCapture();return audio.stop()});
     pick('Microphone','mic',()=>{if(NATIVE)NATIVE.stopPlaybackCapture();return audio.select('mic')});
-    pick(NATIVE?'Phone audio':'Tab / Spotify audio ★','desktop',()=>NATIVE?(audio.stop(),NATIVE.startPlaybackCapture()):audio.select('desktop'));
+    pick(NATIVE?'Phone audio':PCAPP?'System audio ★':'Tab / Spotify audio ★','desktop',()=>NATIVE?(audio.stop(),NATIVE.startPlaybackCapture()):audio.select('desktop'));
     pick('File','file',()=>{const f=el('input');f.type='file';f.accept='audio/*,video/*';f.onchange=()=>f.files[0]&&audio.select('file',{file:f.files[0]}).catch(e=>notice(e.message));f.click()});
     pick('Stream URL','stream',()=>this.dialog('Play a stream',d=>{const u=this.input(d,'HTTP(S) audio URL','');this.button(d,'Play',async()=>{await audio.select('stream',{url:u.value.trim()});this.closeDialog()})}));
     this.srcBtns=src;
@@ -255,6 +255,13 @@ UI={
     const r3=el('button','ch');r3.textContent='Default look';r3.onclick=()=>{for(const k of SYSTEM_KEYS)if(!PDEF[k].quality&&PDEF[k].tab!=='music'||['dir','shock','msn','aring','abeat','aspace','afield','aglow','aspeed','bpu'].includes(k))P[k]=D[k];Exposure.reset();persist();this.sync();notice('Look reset to defaults.',2500)};row2.append(r3);
     const r2=el('button','ch');r2.textContent='Default quality';r2.onclick=()=>{for(const k of SYSTEM_KEYS)if(PDEF[k].g==='Quality')P[k]=D[k];Engine.allocate(quality(),true);persist();this.sync()};
     row2.append(r,r2);
+    if(PCAPP){
+      const h3=el('h4');h3.textContent='Window';panel.append(h3);const row3=el('div','sg extra');panel.append(row3);
+      const fsb=el('button','ch');fsb.textContent='Full screen / window (F11)';fsb.onclick=()=>PCAPP.toggleFullscreen();
+      const top=el('button','ch');top.textContent='Keep on top';top.onclick=async()=>{const on=!top.classList.contains('on');await PCAPP.setAlwaysOnTop(on);top.classList.toggle('on',on)};
+      const q=el('button','ch');q.textContent='Quit (Ctrl+Q)';q.onclick=()=>PCAPP.quit();row3.append(fsb,top,q);
+      PCAPP.info().then(i=>{if(i&&i.gpu){const p=el('p','help extra');p.textContent='Graphics: '+i.gpu;panel.append(p)}}).catch(()=>{});
+    }
     this.diag=el('p','help extra');panel.append(this.diag);
   },
 
@@ -284,57 +291,65 @@ UI={
     add('u','Undo',()=>{if(!Engine.restore())notice('Nothing to undo.',1500)});
     add('z','Pause',b=>{App.paused=!App.paused;b.classList.toggle('on',App.paused);b.querySelector('path').setAttribute('d',App.paused?'M8 5l11 7-11 7z':I.z)});
     add('c','Clear',()=>Engine.clear());
-    if(!NATIVE&&document.documentElement.requestFullscreen){const I2='M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',I3='M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
+    if(PCAPP){const fb=add('f','Window / full screen',()=>PCAPP.toggleFullscreen());fb.innerHTML=svgIcon('M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5')}
+    else if(!NATIVE&&document.documentElement.requestFullscreen){const I2='M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',I3='M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
       const fb=add('f','Fullscreen',()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{}));fb.innerHTML=svgIcon(I2);
       document.addEventListener('fullscreenchange',()=>{fb.innerHTML=svgIcon(document.fullscreenElement?I3:I2);fb.classList.toggle('on',!!document.fullscreenElement)})}
     this.upd.push(()=>{$('#sy').textContent=P.space?String(P.space):''});
   },
 
   /* ---------- per-frame: glass rects, tab capsule, dissolve ---------- */
-  R:new Float32Array(32),Q:new Float32Array(16),X:new Float32Array(8),
+  R:new Float32Array(32),Q:new Float32Array(16),
+  /* Rectangles of the glass panels for the shader. Reading layout every frame is the costly part on phones, so it is
+     redone each frame only while something moves (a panel sliding, dissolving) and every 100 ms otherwise. */
   glass(dpr){
-    let n=0;const R=this.R,Q=this.Q,X=this.X;
+    const now=performance.now();if(this.layoutDirty){this.layoutDirty=false;this.liveUntil=now+900}
+    if(this._g&&this._dpr===dpr&&now>this.liveUntil&&!this.dissolving&&!this.waking&&now-this._gt<100)return this._g;
+    this._gt=now;this._dpr=dpr;
+    let n=0;const R=this.R,Q=this.Q;
     for(const e of this.G){
       let o;if(e.id==='sh')o=+getComputedStyle(e).opacity;else if(e.id==='dlg')o=e.open?1:0;else if(e.id==='note')o=e.hidden?0:1;else o=1;
-      o*=1-(e._d||0)*.0;if(o<.02||n>7)continue;const b=e.getBoundingClientRect();if(b.bottom<0||b.top>VH()||!b.width)continue;
-      R.set([b.left*dpr,b.top*dpr,b.width*dpr,b.height*dpr],n*4);Q[n*2]=Math.min((+e.dataset.r||b.height/2)*dpr,b.width*dpr/2,b.height*dpr/2);Q[n*2+1]=o;X[n]=e._d||0;n++;
+      o*=1-ease(e._d||0);if(o<.02||n>7)continue;const b=e.getBoundingClientRect();if(b.bottom<0||b.top>VH()||!b.width)continue;
+      R.set([b.left*dpr,b.top*dpr,b.width*dpr,b.height*dpr],n*4);Q[n*2]=Math.min((+e.dataset.r||b.height/2)*dpr,b.width*dpr/2,b.height*dpr/2);Q[n*2+1]=o;n++;
     }
-    if(this.open&&this.sel&&n<8){const s=this.sel;R.set([s[0]*dpr,s[1]*dpr,s[2]*dpr,s[3]*dpr],n*4);Q[n*2]=Math.min(s[3]/2*dpr,s[2]/2*dpr);Q[n*2+1]=+getComputedStyle($('#sh')).opacity;X[n]=$('#sh')._d||0;n++}
-    return{R,Q,X,n};
+    if(this.open&&this.sel&&n<8){const s=this.sel;R.set([s[0]*dpr,s[1]*dpr,s[2]*dpr,s[3]*dpr],n*4);Q[n*2]=Math.min(s[3]/2*dpr,s[2]/2*dpr);Q[n*2+1]=+getComputedStyle($('#sh')).opacity*(1-ease($('#sh')._d||0));n++}
+    return this._g={R,Q,n};
   },
   frame(dt){
     /* tab capsule: a spring-driven glass lens that slides and stretches between tabs */
     if(this.open&&this.tab>=0){const b=this.tabBtns[this.tab].getBoundingClientRect(),t=[b.left,b.top,b.width,b.height];
       if(!this.sel)this.sel=t.slice();for(let i=0;i<4;i++){const a=(t[i]-this.sel[i])*320-this.selV[i]*30;this.selV[i]+=a*Math.min(dt,.03);this.sel[i]+=this.selV[i]*Math.min(dt,.03)}}
+    if(PCAPP){const idle=performance.now()-this.lastInput>2500&&!this.open;if(idle!==this._nc){this._nc=idle;document.documentElement.classList.toggle('nocursor',idle)}}   // no pointer in the way
     this.fade(dt);
   },
+  /* Hide on idle / while drawing: the interface becomes ink (Engine.uiBegin) and the fluid carries it off; the real
+     panels fade out underneath in 0.6 s. Wake reverses it quickly. */
   fade(dt){
     const editing=this.open||$('#dlg').open,autoOn=P.auto>0||P.cyc||Music.active();
     const want=P.uh&&!editing&&(Input.down()||(autoOn&&performance.now()-this.lastInput>3500));
-    if(this.waking){this.dissolve=Math.max(0,this.dissolve-dt/.45);this.applyFade();if(!this.dissolve)this.waking=false;return}
-    if(want&&!this.dissolving&&!this.hidden){this.captureMask();this.dissolving=true;this.deposited=0}
-    if(this.dissolving&&!this.hidden){this.dissolve=Math.min(1,this.dissolve+dt/1.1);if(this.dissolve>=1)this.hidden=true}
+    if(this.waking){this.dissolve=Math.max(0,this.dissolve-dt/.35);this.applyFade();if(!this.dissolve){this.waking=false}return}
+    if(want&&!this.dissolving&&!this.hidden){this.captureMask();Engine.uiBegin(this.mask);this.dissolving=true}
+    if(this.dissolving&&!this.hidden){this.dissolve=Math.min(1,this.dissolve+dt/.6);if(this.dissolve>=1)this.hidden=true}
     this.applyFade();
-    if(this.hidden&&!autoOn&&!Input.down()&&!editing&&performance.now()-this.lastInput>P.ud*1000)this.wake();
+    if(this.hidden&&!this.pinned&&!autoOn&&!Input.down()&&!editing&&performance.now()-this.lastInput>P.ud*1000)this.wake();
   },
   applyFade(){
-    this.G.forEach((e,i)=>{const d=clamp(this.dissolve*(1.25-.08*i),0,1);e._d=d;e.classList.toggle('ds',d>.01);e.classList.toggle('gone',d>.4);if(d>.01){e.style.setProperty('--b',d*14+'px');e.style.setProperty('--o',Math.max(0,1-d*1.5))}else{e.style.removeProperty('--b');e.style.removeProperty('--o')}});
+    Engine.ui.a=ease(this.dissolve);
+    this.G.forEach((e,i)=>{const d=clamp(this.dissolve*(1.15-.05*i),0,1);e._d=d;e.classList.toggle('ds',d>.01);e.classList.toggle('gone',d>.4);if(d>.01)e.style.setProperty('--o',Math.max(0,1-ease(d)));else e.style.removeProperty('--o')});
   },
-  wake(){if(!this.dissolving&&!this.hidden)return;this.hidden=false;this.dissolving=false;this.waking=true;this.lastInput=performance.now()},
-  depositStep(){
-    if(!this.dissolving||!this.mask||this.dissolve<=this.deposited||App.paused)return;
-    Engine.deposit(this.mask,this.dissolve,this.deposited,4);this.deposited=this.dissolve;
-  },
+  /* H key: melt the interface away and keep it away until H or a tap. */
+  hideNow(){if(this.hidden||this.dissolving)return;if(this.open)this.shut();this.captureMask();Engine.uiBegin(this.mask);this.dissolving=true;this.pinned=true},
+  wake(){this.pinned=false;if(!this.dissolving&&!this.hidden)return;this.hidden=false;this.dissolving=false;this.waking=true;this.lastInput=performance.now();Engine.uiRelease()},
   /* Rasterise the visible interface (panels, text, icons, chips) into a mask; it becomes ink as it melts. */
   captureMask(){
     const w=Math.round(VW()),h=Math.round(VH()),c=this.maskCanvas||(this.maskCanvas=el('canvas'));c.width=w;c.height=h;const x=c.getContext('2d');x.clearRect(0,0,w,h);
     for(const panel of this.G){
       if(panel.id==='dlg'&&!panel.open||panel.id==='note'&&panel.hidden||panel.id==='sh'&&!this.open)continue;
-      const r=panel.getBoundingClientRect(),rad=+panel.dataset.r||r.height/2;x.save();x.beginPath();x.roundRect(r.x,r.y,r.width,r.height,rad);x.clip();x.fillStyle='rgba(170,195,230,.12)';x.fillRect(r.x,r.y,r.width,r.height);
+      const r=panel.getBoundingClientRect(),rad=+panel.dataset.r||r.height/2;x.save();x.beginPath();x.roundRect(r.x,r.y,r.width,r.height,rad);x.clip();x.fillStyle='rgba(170,195,230,.14)';x.fillRect(r.x,r.y,r.width,r.height);x.strokeStyle='rgba(255,255,255,.3)';x.lineWidth=2.5;x.stroke();
       const walk=document.createTreeWalker(panel,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT);let node;
       while((node=walk.nextNode())){
         const e=node.nodeType===3?node.parentElement:node;if(!e||e.closest('[hidden]'))continue;
-        if(node.nodeType===3){if(!node.textContent.trim())continue;const rg=document.createRange();rg.selectNodeContents(node);const b=rg.getBoundingClientRect();if(!b.width)continue;const st=getComputedStyle(e);x.fillStyle='#fff';x.font=`${st.fontWeight} ${st.fontSize} ${st.fontFamily}`;x.textBaseline='middle';x.fillText(node.textContent.trim(),b.x,b.y+b.height/2);continue}
+        if(node.nodeType===3){if(!node.textContent.trim())continue;const rg=document.createRange();rg.selectNodeContents(node);const b=rg.getBoundingClientRect();if(!b.width)continue;const st=getComputedStyle(e),eb=e.getBoundingClientRect();if(eb.width<2)continue;x.save();x.beginPath();x.rect(eb.x,eb.y,eb.width,eb.height);x.clip();x.fillStyle='#fff';x.font=`${st.fontWeight} ${st.fontSize} ${st.fontFamily}`;x.textBaseline='middle';x.fillText(node.textContent.trim(),b.x,b.y+b.height/2);x.restore();continue}
         const b=e.getBoundingClientRect();if(!b.width||!b.height||b.bottom<r.top||b.top>r.bottom)continue;
         if(e.tagName==='svg'){x.save();x.translate(b.x,b.y);x.scale(b.width/24,b.height/24);x.strokeStyle='#fff';x.lineWidth=1.8;x.lineCap=x.lineJoin='round';for(const p of e.querySelectorAll('path'))x.stroke(new Path2D(p.getAttribute('d')));x.restore()}
         else if(e.matches('.c')){x.fillStyle=e.style.background.includes('rgb')?(e.style.background.match(/rgb\([^)]*\)/g)||['#888'])[1]||'#888':'#888';x.globalAlpha=.55;x.beginPath();x.roundRect(b.x,b.y,b.width,b.height,22);x.fill();x.globalAlpha=1}
@@ -343,7 +358,7 @@ UI={
       x.restore();
     }
     if(!this.mask){this.mask=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.mask);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE)}
-    gl.bindTexture(gl.TEXTURE_2D,this.mask);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+    gl.bindTexture(gl.TEXTURE_2D,this.mask);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
   }
 };
 function quality(){const q={};for(const k of QUALITY_KEYS)q[k]=P[k];return Gov.quality(q)}

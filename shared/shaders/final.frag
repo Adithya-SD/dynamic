@@ -7,7 +7,8 @@ uniform sampler2D uGhost;uniform float uGhostA,uGhostT,uGhostK;uniform vec3 uGho
 uniform float uOrb,uDof;   // ball radius (short-side units) and how out of focus its backdrop is
 uniform vec2 uRes;
 uniform float uBloomAmt,uVig,uContrast,uGrain,uLens,uTime,uDp,uBlack,uSharp;
-uniform vec4 uR[8];uniform vec2 uQ[8];uniform float uX[8];
+uniform vec4 uR[8];uniform vec2 uQ[8];
+uniform sampler2D uUi;uniform float uUiA;   // interface ink (uiflow.frag): the interface melting into the flow
 uniform float uN,uRefr,uBlur,uBezel,uDisp;
 // Depth of field: behind the ball the picture is replaced by a wide soft blur (bokeh from the quarter and eighth size copies).
 vec3 base(vec2 u){
@@ -26,7 +27,9 @@ float sd(vec2 p,vec4 R,float r){vec2 h=R.zw*.5,q=abs(p-R.xy-h)-h+r;return length
 void main(){
   vec2 fc=vec2(gl_FragCoord.x,uRes.y-gl_FragCoord.y);
   vec3 col;
-  if(uLens>0.){vec2 d=(v-.5)*uLens*.012;col=vec3(base(v+d).r,base(v).g,base(v-d).b)+texture(uBloom,v).rgb*uBloomAmt;}
+  if(uLens>0.){vec2 d=(v-.5)*uLens*.012;vec3 c0=base(v);   // colour fringes: the blurred backdrop has none, so only the sharp part is shifted
+    float k=uDof>0.?smoothstep(.97,1.12,length((v-.5)*uRes)/(uOrb*min(uRes.x,uRes.y)))*uDof:0.;
+    col=vec3(mix(texture(uImg,v+d).r,c0.r,k),c0.g,mix(texture(uImg,v-d).b,c0.b,k))+texture(uBloom,v).rgb*uBloomAmt;}
   else col=img(fc);
   if(uGhostA>0.){
     float t=uGhostT;
@@ -43,15 +46,16 @@ void main(){
     col+=(texture(uImg,v).rgb-s0*.25)*uSharp;col=max(col,0.);}
   // Black point: whatever is fainter than this is pushed to true black, so fading ink never leaves a coloured smudge behind.
   if(uBlack>0.)col*=smoothstep(0.,uBlack,max(col.r,max(col.g,col.b)));
-  float best=1e5,a=0.,rr=0.,dsv=0.;vec4 R=vec4(0.);
-  int nr=int(uN);for(int i=0;i<nr;i++){float d=sd(fc,uR[i],uQ[i].x);if(d<best){best=d;R=uR[i];rr=uQ[i].x;a=uQ[i].y;dsv=uX[i];}}
-  col*=1.-.32*a*(1.-dsv)*exp(-max(best,0.)/(16.*uDp));
+  float best=1e5,a=0.,rr=0.;vec4 R=vec4(0.);
+  int nr=int(uN);for(int i=0;i<nr;i++){
+    vec2 q=abs(fc-uR[i].xy-uR[i].zw*.5)-uR[i].zw*.5;if(max(q.x,q.y)>120.*uDp)continue;   // a panel's shadow is gone 120 px out: skip its distance field
+    float d=sd(fc,uR[i],uQ[i].x);if(d<best){best=d;R=uR[i];rr=uQ[i].x;a=uQ[i].y;}}
+  col*=1.-.32*a*exp(-max(best,0.)/(16.*uDp));
   if(best<0.){
     float B=min(22.*uDp*uBezel,.5*min(R.z,R.w)),dep=clamp(-best/B,0.,1.);
     vec2 e=vec2(1.,0.),g=vec2(sd(fc+e,R,rr)-sd(fc-e,R,rr),sd(fc+e.yx,R,rr)-sd(fc-e.yx,R,rr));g/=length(g)+1e-4;
     float f=1.-sqrt(1.-pow(1.-dep,2.));
-    float nz=vnoise(fc/(30.*uDp)+uTime*.35)*.65+vnoise(fc/(9.*uDp)-uTime)*.35;
-    vec2 m=(fc-R.xy-R.zw*.5)*.05*uRefr+dsv*vec2(nz-.5,vnoise(fc/(24.*uDp)+7.)-.5)*90.*uDp;
+    vec2 m=(fc-R.xy-R.zw*.5)*.05*uRefr;
     vec3 s=vec3(0.);int taps=uBlur>.01?6:1;
     for(int k=0;k<taps;k++){
       float an=float(k)*2.399,rd=taps==1?0.:sqrt((float(k)+.5)/6.)*uBlur*uDp;vec2 o2=vec2(cos(an),sin(an))*rd;
@@ -60,9 +64,9 @@ void main(){
     float rim=exp(-max(-best,0.)/(1.6*uDp)),ang=dot(g,vec2(-.6,-.8)),sp=pow(max(ang,0.),1.5)+.55*pow(max(-ang,0.),2.);
     s+=rim*(.18+.85*sp)+(1.-dep)*(1.-dep)*.12*(.5+sp);
     s+=.06*(1.-clamp((fc.y-R.y)/R.w,0.,1.));
-    float cvg=smoothstep(dsv*1.25-.25,dsv*1.25-.05,nz),ins=smoothstep(0.,1.5*uDp,-best);
-    col=mix(col,s,ins*a*cvg);col+=cvg*(1.-cvg)*4.*step(.001,dsv)*(.3+col)*ins;
+    col=mix(col,s,smoothstep(0.,1.5*uDp,-best)*a);
   }
+  if(uUiA>0.){vec4 u=texture(uUi,v);col=col*(1.-u.a*uUiA)+u.rgb*uUiA;}
   col*=1.-uVig*dot(v-.5,v-.5);
   col=max((col-.35)*uContrast+.35,0.);
   float live=smoothstep(0.,.02,max(col.r,max(col.g,col.b)));
