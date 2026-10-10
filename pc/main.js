@@ -92,7 +92,7 @@ app.whenReady().then(() => {
     win.setFullScreen(false); win.setSize(1280, 720);
     setTimeout(async () => {
       let r;
-      try { r = await win.webContents.executeJavaScript('({renderer:gl.getParameter(gl.RENDERER),fps:Math.round(App.fps),refresh:Gov.refresh,res:Engine.res,secure:isSecureContext,pc:!!PCAPP,audio:audio.state,mode:audio.analysisMode,music:Music.active(),bpm:Math.round(Music.bpm),preset:allPresets()[current].n})'); }
+      try { r = await win.webContents.executeJavaScript('({build:BUILD.id,origin:performance.timeOrigin,renderer:gl.getParameter(gl.RENDERER),fps:Math.round(App.fps),refresh:Gov.refresh,res:Engine.res,secure:isSecureContext,pc:!!PCAPP,audio:audio.state,mode:audio.analysisMode,music:Music.active(),bpm:Math.round(Music.bpm),preset:allPresets()[current].n})'); }
       catch (e) { r = {error: String(e)}; }
       try { r.gpuInfo = await app.getGPUInfo('basic'); r.priorities = app.getAppMetrics().map(m => [m.type, m.pid]); } catch (e) { /* ignore */ }
       require('fs').writeFileSync(process.env.DYNAMIC_SMOKE, JSON.stringify(r, null, 1));
