@@ -337,8 +337,8 @@ UI={
   },
   /* The 3D adjuster: the stereo settings (Look → 3D) as one small panel, built from the same controls so both stay in step. */
   build3D(){
-    const pop=$('#st');pop.append(el('div','st-h','<b>3D</b><small>glasses · TV · VR headset</small>'));
-    for(const k of['stm','sdep','scnv','slens','ssw','sinv']){const d=PDEF[k];if(!d)continue;pop.append(d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):this.slider(d))}
+    const pop=$('#st');pop.append(el('div','st-h','<b>3D</b><small>glasses · free view · VR</small>'));
+    for(const k of['stm','sdep','scnv','ssz','slens','ssw','sgd','sinv']){const d=PDEF[k];if(!d)continue;pop.append(d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):this.slider(d))}
   },
   pop:null,
   openPop(id){this.closePops();if(this.open)this.shut();this.pop=id;$('#'+id).classList.add('o');$('#kd').classList.toggle('open',id==='st');$('#km').classList.toggle('on',id==='dock2');this.layoutDirty=true},

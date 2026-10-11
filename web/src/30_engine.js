@@ -176,7 +176,7 @@ const Engine={
     let img=base,gb=bloomTex,gamt=bloomAmt,dofF=dof,lensF=P.lens;
     if(st){
       if(!this.stereo||this.stereo.w!==res[0]||this.stereo.h!==res[1]){kill(this.stereo);this.stereo=target(res[0],res[1],'rgba16f')}
-      pass('stereo.frag',{uImg:base,uBloom:bloomTex,uBloomAmt:bloomAmt,uFarA:farA,uFarB:farB,uRes:res,uMode:st,uDepth:P.sdep,uConv:P.scnv,uSwap:P.ssw,uInv:P.sinv,uLens:P.slens,uOrb:sp.uOrb,uDof:dof},this.stereo);
+      pass('stereo.frag',{uImg:base,uBloom:bloomTex,uBloomAmt:bloomAmt,uFarA:farA,uFarB:farB,uRes:res,uMode:st,uDepth:P.sdep,uConv:P.scnv,uSwap:P.ssw,uInv:P.sinv,uLens:P.slens,uPair:P.ssz,uGuide:P.sgd,uOrb:sp.uOrb,uDof:dof},this.stereo);
       img=this.stereo;gb=this.black;gamt=0;dofF=0;lensF=0;
     }else if(this.stereo){kill(this.stereo);this.stereo=null}
     if(toScreen)this.lastFrame={base:img,bloom:gb,amt:gamt};
