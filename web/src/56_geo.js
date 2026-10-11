@@ -3,7 +3,7 @@
    counter-turns, layer 3 stays put, so even a still drawing moves. The fluid carries the ink away and the pattern keeps
    re-forming; on beats it breathes and pushes the flow outward. Animated patterns (3D solids, attractors, chords)
    are redrawn ~20 times a second. Families: Sacred, Chakra, Divine, Solids, Math, Fractal, Psychedelic. */
-const GEO_SIZE=1024;
+const GEO_SIZE=typeof __GEO_SIZE!=='undefined'?__GEO_SIZE:1024,GEO_ANIM=typeof __GEO_ANIM!=='undefined'?__GEO_ANIM:512;   // the watch draws its patterns smaller
 const Geo={
   tex:null,cv:null,x:null,cur:-1,curW:-1,drawT:0,anim:0,thumbs:{},ctr:[.5,.5],
   init(){
@@ -27,7 +27,7 @@ const Geo={
     const p=GEO[i],animate=p&&p.anim;this.drawT+=dt*(1+Music.energy*1.5)*(animate?1:0);
     const dropKey=p&&p.onDrop?Music.dropN:0;
     if(i!==this.cur||E.gw!==this.curW||dropKey!==this.curDrop||animate&&(this.anim+=dt)>=1/12){this.anim=0;this.cur=i;this.curW=E.gw;this.curDrop=dropKey;
-      const sz=animate?512:GEO_SIZE;if(this.cv.width!==sz)this.cv.width=this.cv.height=sz;this.paint(this.x,i,p&&p.onDrop?dropKey*15:this.drawT,sz,E.gw);this.upload()}
+      const sz=animate?GEO_ANIM:GEO_SIZE;if(this.cv.width!==sz)this.cv.width=this.cv.height=sz;this.paint(this.x,i,p&&p.onDrop?dropKey*15:this.drawT,sz,E.gw);this.upload()}
     return true;
   },
   /* Small preview for the picker (data URL, drawn once). */

@@ -69,6 +69,7 @@ function uniformsOf(p) {
 }
 
 const events = [], errors = [];
+let canvases = 0, c2dOps = 0;
 const store = new Map();
 let clockMs = 1000;
 const sandbox = {
@@ -80,6 +81,7 @@ const sandbox = {
     emit: (n, t) => { events.push([n, t]); },
     surface: () => [450, 450],
     glStats: () => 'mock',
+    c2dNew: () => ++canvases, c2dSize: () => {}, c2d: () => { c2dOps++; },
   },
   console: { log() {}, info() {}, debug() {}, warn: (...a) => errors.push('warn: ' + a.join(' ')), error: (...a) => errors.push(a.join(' ')) },
 };
@@ -107,12 +109,15 @@ for (let i = 0; i < FRAMES; i++) {
   if (i === 150) run('__nativeQuat(0.1,0.05,0,0.99)');
   if (i === 160) run('WatchApp.quality(3)');
   if (i === 180) run('WatchApp.go(allPresets().findIndex(p=>p.n==="Nebula"))');
+  if (i === 200) run('WatchApp.go(allPresets().findIndex(p=>p.n==="Flower of Life"))');
+  if (i === 220) run('WatchApp.go(allPresets().findIndex(p=>p.n==="Metatron"))');
   if (run('__frame(' + clockMs + ')')) drawn++;
   if (i % 40 === 0) await new Promise(r => setTimeout(r, 0));
 }
 const state = JSON.parse(run('WatchApp.state()'));
 const presets = JSON.parse(run('WatchApp.presets()'));
 console.log(`frames ${FRAMES}, drawn ${drawn}, ${Date.now() - t0} ms; GL: ${stats.programs} programs, ${stats.draws} draws, ${stats.uniformCalls} uniform calls, ${stats.targets} textures`);
+console.log(`2D canvas: ${canvases} canvases, ${c2dOps} drawing calls`);
 console.log('state', JSON.stringify(state));
 console.log(`${presets.length} presets for the watch; events:`, [...new Set(events.map(e => e[0]))].join(', '));
 const uniq = [...new Set(errors)];

@@ -1,6 +1,9 @@
 /* Wear OS host, part 3: the frame loop (80_main.js without the browser parts), a stand-in for the interface the engine
    talks to, and WatchApp: the few calls the native watch interface makes. Loaded last in the watch bundle. */
-const WATCH_GEO=false;   // sacred-geometry presets draw on a 2D canvas; the native bridge for that is not written yet
+/* Sacred-geometry patterns are drawn by the native 2D canvas. The few that need a per-pixel field (fractals, interference) are too heavy for a watch: they and the
+   presets that use them stay out of its list. */
+for(const g of GEO)g.noWatch=!!(g.draw&&/[.]field[(]/.test(String(g.draw)));
+function geoOk(pr){const g=pr.p.geo;if(!g)return true;const i=typeof g==='string'?GEO.findIndex(x=>x.n===g):g|0;return i>0&&!!GEO[i]&&!GEO[i].noWatch}
 const Quick={reset:__noop,touch:__noop,apply:__noop};
 
 function notice(text,ms=5000){__host.emit('toast',JSON.stringify([String(text),ms]))}
@@ -14,7 +17,7 @@ UI={
   presetChanged(){__host.emit('preset',allPresets()[current].n)},
   /* Next / previous preset: the same pool as the web interface, minus what the watch cannot draw yet. */
   cycle(d=1){
-    const list=allPresets(),pool=list.map((p,i)=>i).filter(i=>favorites.size?favorites.has(list[i].n):list[i].c!=='Classic'&&(WATCH_GEO||!list[i].p.geo));
+    const list=allPresets(),pool=list.map((p,i)=>i).filter(i=>favorites.size?favorites.has(list[i].n):list[i].c!=='Classic'&&geoOk(list[i]));
     let i=pool.indexOf(current);if(i<0)i=d>0?-1:0;
     applyPreset(pool[(i+d+pool.length)%pool.length],{animate:true});
   },
@@ -26,8 +29,8 @@ UI={
   }
 };
 
-/* No pattern canvas yet: random looks never pick a pattern. */
-{const look=Rand.look.bind(Rand);Rand.look=seed=>{const v=look(seed);if(!WATCH_GEO)v.geo=0;return v}}
+/* Random looks only pick patterns the watch can draw. */
+{const look=Rand.look.bind(Rand);Rand.look=seed=>{const v=look(seed);if((v.geo|0)>0&&(!GEO[v.geo|0]||GEO[v.geo|0].noWatch))v.geo=0;return v}}
 
 /* No pixel-buffer fences in the bridge: the exposure sample is a small synchronous read, twice a second. */
 Exposure.sample=function(dt){
@@ -138,7 +141,7 @@ const WatchApp={
       paused:App.paused,tilt:P.tilt,auto:P.auto,orb:P.orb,error:Engine.error,cpu:+App.cpu.toFixed(1)});
   },
   /* The presets the watch can draw, as [index, name, category] rows. */
-  presets(){const l=allPresets(),o=[];l.forEach((p,i)=>{if(p.c!=='Classic'&&(WATCH_GEO||!p.p.geo))o.push([i,p.n,p.c])});return JSON.stringify(o)},
+  presets(){const l=allPresets(),o=[];l.forEach((p,i)=>{if(p.c!=='Classic'&&geoOk(p))o.push([i,p.n,p.c])});return JSON.stringify(o)},
   palettes(){return JSON.stringify(SCHEMA.palettes.map(([n,h])=>[n,h||[]]))},
   cycle(d){UI.cycle(d)},
   go(i){applyPreset(i,{animate:true})},

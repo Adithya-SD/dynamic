@@ -17,6 +17,7 @@
 #include <string.h>
 #include <time.h>
 #include "quickjs/quickjs.h"
+#include "canvas2d.h"
 
 #define LOG(...) __android_log_print(ANDROID_LOG_INFO, "Dynamic", __VA_ARGS__)
 #define ERR(...) __android_log_print(ANDROID_LOG_ERROR, "Dynamic", __VA_ARGS__)
@@ -175,6 +176,16 @@ FN(generateMipmap) { glGenerateMipmap(GI(0)); return JS_UNDEFINED; }
 FN(pixelStorei) { int p = GI(0); if (p == GL_UNPACK_ALIGNMENT || p == GL_PACK_ALIGNMENT) glPixelStorei(p, GI(1)); return JS_UNDEFINED; }
 /* texImage2D(target, level, internal, w, h, border, format, type, pixels|null); the canvas / image overloads upload nothing here. */
 FN(texImage2D) {
+    if (argc == 6 && JS_IsObject(argv[5])) {   /* the 2D canvas the sacred-geometry patterns draw on: uploaded with the rows flipped, as UNPACK_FLIP_Y_WEBGL does */
+        JSValue idv = JS_GetPropertyStr(c, argv[5], "_id"); int id = I(c, idv), w = 0, h = 0; uint8_t *px = NULL; JS_FreeValue(c, idv);
+        if (c2d_get(id, &w, &h, &px)) {
+            uint8_t *t = malloc((size_t)w * h * 4);
+            for (int y = 0; y < h; y++) memcpy(t + (size_t)y * w * 4, px + (size_t)(h - 1 - y) * w * 4, (size_t)w * 4);
+            glTexImage2D(GI(0), GI(1), GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, t);
+            free(t);
+        }
+        return JS_UNDEFINED;
+    }
     if (argc < 9) return JS_UNDEFINED;
     size_t len = 0; uint8_t *p = bytes_of(c, argv[8], &len);
     glTexImage2D(GI(0), GI(1), GI(2), GI(3), GI(4), GI(5), GI(6), GI(7), p);
@@ -285,6 +296,15 @@ static JSValue host_glstats(JSContext *c, JSValueConst t, int argc, JSValueConst
     memset(gl_ns, 0, sizeof gl_ns); memset(gl_cnt, 0, sizeof gl_cnt);
     return JS_NewString(c, buf);
 }
+/* ---------- host: 2D canvas for the pattern art (canvas2d.c) ---------- */
+static JSValue host_c2dnew(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) { return JS_NewInt32(c, c2d_new(I(c, ARG(0)), I(c, ARG(1)))); }
+static JSValue host_c2dsize(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) { c2d_size(I(c, ARG(0)), I(c, ARG(1)), I(c, ARG(2))); return JS_UNDEFINED; }
+static JSValue host_c2d(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    double a[6] = { 0, 0, 0, 0, 0, 0 };
+    for (int i = 0; i < 6 && 2 + i < argc; i++) JS_ToFloat64(c, &a[i], argv[2 + i]);
+    c2d_op(I(c, ARG(0)), I(c, ARG(1)), a[0], a[1], a[2], a[3], a[4], a[5]);
+    return JS_UNDEFINED;
+}
 /* ---------- host: clock, files, events, console ---------- */
 static JSValue host_now(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -368,6 +388,9 @@ static void setup_globals(void) {
     JS_SetPropertyStr(ctx, g, "__gl", gl);
     JSValue host = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, host, "now", JS_NewCFunction(ctx, host_now, "now", 0));
+    JS_SetPropertyStr(ctx, host, "c2dNew", JS_NewCFunction(ctx, host_c2dnew, "c2dNew", 2));
+    JS_SetPropertyStr(ctx, host, "c2dSize", JS_NewCFunction(ctx, host_c2dsize, "c2dSize", 3));
+    JS_SetPropertyStr(ctx, host, "c2d", JS_NewCFunction(ctx, host_c2d, "c2d", 8));
     JS_SetPropertyStr(ctx, host, "glStats", JS_NewCFunction(ctx, host_glstats, "glStats", 0));
     JS_SetPropertyStr(ctx, host, "surface", JS_NewCFunction(ctx, host_surface, "surface", 0));
     JS_SetPropertyStr(ctx, host, "read", JS_NewCFunction(ctx, host_read, "read", 1));
