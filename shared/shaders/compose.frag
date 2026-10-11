@@ -72,7 +72,7 @@ void main(){
   vec3 z;
   if(uOrb<=0.){
     vec2 uv=spaceUV(gl_FragCoord.xy);
-    z=sceneAt(uv,gParity);
+    z=sceneAt(uv,gParity)*(1.-gVoid);   // the infinite canvas is a void beyond its sheet
   }else{
     // A ball in front of an endless backdrop. Inside the ball: the picture wrapped on a sphere, lit, with a glowing rim.
     // Outside: the flat picture, darker and (in the final pass) out of focus. A one pixel blend hides the edge.

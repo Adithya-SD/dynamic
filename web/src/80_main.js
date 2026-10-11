@@ -5,7 +5,7 @@ const App={
   ready:null,
   async start(){
     let done;this.ready=new Promise(r=>done=r);
-    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||P.cvs);this.cvsSeen=P.cvs|0;
+    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||(P.cvs|0)===2);Engine.open=!Engine.wrap&&(P.cvs|0)===1;this.cvsSeen=P.cvs|0;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
     UI.build();Input.init();Tilt.init();Eyes.init();Music.init();PadPlay.init();if(WATCH)Watch.init();
@@ -38,7 +38,7 @@ const App={
     clock+=dt;stepMorph(dt);
     if(P.cyc&&!this.paused&&(this.cycT=(this.cycT||0)+dt)>20){this.cycT=0;UI.cycle()}
 
-    if((P.cvs|0)!==this.cvsSeen){this.cvsSeen=P.cvs|0;Engine.setWrap(!!(P.edges||P.cvs));if(!Engine.allocate(quality()))notice(Engine.error)}   // the world is 1.8x the screen on endless and wrapping canvases
+    if((P.cvs|0)!==this.cvsSeen){this.cvsSeen=P.cvs|0;Engine.applyEdges();if(!Engine.allocate(quality()))notice(Engine.error)}   // the world is 1.8x the screen on endless and wrapping canvases
     Tilt.follow=Space.mode!==1;   // an endless canvas scrolls with the tilt and never recentres
     if(WATCH&&P.auto<.45)P.auto=.45;   // a watch has nobody drawing on it all day: it paints itself
     const gq=Gov.begin();

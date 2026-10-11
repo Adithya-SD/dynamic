@@ -5,7 +5,7 @@ const TAU=Math.PI*2,PHI=(1+Math.sqrt(5))/2;
 const mirror1=x=>1-Math.abs(((x%2)+2)%2-1);
 const Space={
   spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,orbT:0,cam:[0,0],pshift:[0,0],sph:[0,0],hypM:[0,0],mode:0,pendingShift:null,inkSize:[1024,1024],orbR:[1,0,0,0,1,0,0,0,1],
-  u:{uLoop:48,uCam:[0,0],uPeriodic:0,uOrb:0,uPulse:0,uOrbM:[1,0,0,0,1,0,0,0,1],uMobBg:[0,0],uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
+  u:{uLoop:48,uCam:[0,0],uPeriodic:0,uVoid:0,uOrb:0,uPulse:0,uOrbM:[1,0,0,0,1,0,0,0,1],uMobBg:[0,0],uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
   hyperbolic(p,q){
     p=Math.round(p);q=Math.round(q);
     if((p-2)*(q-2)<=4)q=Math.floor(2+4/(p-2))+1;
@@ -27,7 +27,7 @@ const Space={
     u.uSpace=P.space|0;u.uRes=res;u.uWorld=world;u.uSegs=P.kal;u.uDepth=P.foldDepth;u.uSpin=this.spin;u.uTile=P.tile;
     /* Canvas: 0 Window (tilt leans the picture), 1 Infinite (tilt is a joystick: the camera scrolls for ever over a world that
        repeats), 2 Wrap (tilt looks around a finite world whose edges wrap). A ball always takes the tilt itself. */
-    const cvs=P.cvs|0,mode=P.orb>0?0:cvs;this.mode=mode;u.uPeriodic=cvs?1:0;
+    const cvs=P.cvs|0,mode=P.orb>0?0:cvs;this.mode=mode;u.uPeriodic=cvs===2?1:0;u.uVoid=cvs===1&&!(P.orb>0)?1:0;   // Wrap repeats the world; Infinite is a void
     const pos=mode===1?[0,0]:tl;   // position-like tilt (Window and Wrap)
     if(mode===1&&dt>0){
       const sp=(P.cspd||1)*.45,vx=tl[0]*sp,vy=tl[1]*sp,sh=Math.min(res[0],res[1]),c=Math.cos(this.spin),s=Math.sin(this.spin),tile=Math.max(P.tile,.05);

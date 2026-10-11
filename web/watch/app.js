@@ -21,7 +21,7 @@ UI={
   change(k,v){
     morph=null;const old=P[k];P[k]=v;
     if(PDEF[k].quality){if(!Engine.allocate(quality())){P[k]=old;notice(Engine.error)}}
-    if(k==='edges')Engine.setWrap(!!(v||P.cvs));
+    if(k==='edges')Engine.applyEdges();
     persist();
   }
 };
@@ -47,7 +47,7 @@ const App={
   last:0,frames:0,fpsT:0,fps:0,cpu:0,ready:false,started:false,prof:{logic:0,step:0,parts:0,render:0,gpu:0,n:0,m:0},
   start(){
     if(this.started)return;this.started=true;const T0=performance.now(),lap=n=>console.log('boot '+n+' '+Math.round(performance.now()-T0)+' ms');
-    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||P.cvs);this.cvsSeen=P.cvs|0;
+    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||(P.cvs|0)===2);Engine.open=!Engine.wrap&&(P.cvs|0)===1;this.cvsSeen=P.cvs|0;
     // First run on the watch: light quality, no interface effects, a bit more wrist pour; start on Infinity.
     if(!store.get('dynamic.watchinit',0)){store.set('dynamic.watchinit',1);P.qual=4;P.uh=0;P.st=0;P.tflow=.5;persist();const i=allPresets().findIndex(x=>x.n==='Infinity');if(i>=0)applyPreset(i)}
     Gov.cap=30;
@@ -81,7 +81,7 @@ const App={
     clock+=dt;stepMorph(dt);
     if(P.cyc&&!this.paused&&(this.cycT=(this.cycT||0)+dt)>20){this.cycT=0;UI.cycle()}
 
-    if((P.cvs|0)!==this.cvsSeen){this.cvsSeen=P.cvs|0;Engine.setWrap(!!(P.edges||P.cvs));if(!Engine.allocate(quality()))notice(Engine.error)}
+    if((P.cvs|0)!==this.cvsSeen){this.cvsSeen=P.cvs|0;Engine.applyEdges();if(!Engine.allocate(quality()))notice(Engine.error)}
     Tilt.follow=Space.mode!==1;
     if(P.auto<.45)P.auto=.45;   // a watch has nobody drawing on it all day: it paints itself
     Music.frame(dt);

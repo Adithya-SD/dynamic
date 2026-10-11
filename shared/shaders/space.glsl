@@ -24,10 +24,12 @@ uniform vec2 uMobBg;    // the same, for the backdrop around the ball (tilt walk
 uniform float uOrb;     // ball radius in short-side units; 0 = flat
 uniform float uPulse;   // the frame swells by this fraction on every hit
 uniform vec2 uCam;      // infinite / wrap canvas: where the camera looks on the sheet (sheet uv)
-uniform float uPeriodic;// 1: the sheet repeats seamlessly (infinite and wrap canvases) instead of mirroring at its edges
+uniform float uPeriodic;// 1: the sheet repeats seamlessly (the wrap canvas) instead of mirroring at its edges
+uniform float uVoid;    // 1: the infinite canvas is a void: past the sheet there is nothing (no mirror, no repeat)
 uniform mat3 uOrbM;     // view-space normal -> normal on the ball's own surface
 uniform int uLoop;      // fold iteration cap; a uniform bound keeps D3D shader compilers from unrolling
 float gParity;          // number of mirror flips; tints alternate tiles
+float gVoid;            // 0..1: how far this pixel is into the void (set by wrapUV)
 vec3 gOrbN;             // view-space surface normal of the ball at this pixel
 
 vec2 sheetUV(vec2 q){float s=min(uRes.x,uRes.y);return .5+q*s/uRes/uWorld;}
@@ -117,8 +119,10 @@ vec2 spaceMap(vec2 fc){
 }
 // Where the sheet ends: mirrored (so nothing samples off the edge) or, on an endless / wrapping canvas, repeated.
 vec2 wrapUV(vec2 m){
+  gVoid=0.;
 #if SPACE<=1
   if(uPeriodic>.5)return fract(m);
+  if(uVoid>.5){float d=max(max(-m.x,m.x-1.),max(-m.y,m.y-1.));gVoid=smoothstep(-.015,0.,d);return clamp(m,0.,1.);}
 #endif
   return mirrorWrap(m);
 }

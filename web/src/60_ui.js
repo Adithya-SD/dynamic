@@ -140,7 +140,7 @@ UI={
     Quick.touch(k);
     const old=P[k];P[k]=v;
     if(PDEF[k].quality){if(!Engine.allocate(quality())){P[k]=old;notice(Engine.error)}}
-    if(k==='edges')Engine.setWrap(!!(v||P.cvs));
+    if(k==='edges')Engine.applyEdges();
     persist();this.sync();
   },
   sync(){for(const f of this.upd)f();if(this.searching)this.search()},
@@ -202,7 +202,7 @@ UI={
     $('#pn').textContent=pr.n;this.about.textContent=pr.about||(pr.c==='Mine'?'Your preset.':pr.c==='Classic'?'Original Dynamics 8 preset.':'');
     this.favBtn.textContent=(favorites.has(pr.n)?'★':'☆')+' Favorite';this.delBtn.hidden=current<BUILTIN;
     [...$('#pg').children].forEach(c=>c.classList.toggle('on',c.getAttribute('aria-label')==='Load '+pr.n));
-    if(Engine.vel)Engine.setWrap(!!(P.edges||P.cvs));
+    if(Engine.vel)Engine.applyEdges();
     this.sync();
   },
   cycle(d=1){const list=allPresets(),pool=list.map((p,i)=>i).filter(i=>favorites.size?favorites.has(list[i].n):list[i].c!=='Classic');let i=pool.indexOf(current);if(i<0)i=d>0?-1:0;const n=pool[(i+d+pool.length)%pool.length];applyPreset(n,{animate:true})},

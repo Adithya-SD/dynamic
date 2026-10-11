@@ -12,7 +12,7 @@ const REF=128,MAX_VEL=1500,PART_SIDE=256;
 const Engine={
   vel:null,prs:null,div:null,crl:null,dye:null,fwd:null,
   parts:null,ptx:null,scene:null,lit:null,echo:null,bloom:[],
-  sim:[1,1],ink:[1,1],res:[1,1],world:1,wrap:false,
+  sim:[1,1],ink:[1,1],res:[1,1],world:1,wrap:false,open:false,
   stamps:new Float32Array(12*256),nStamps:0,stampBuf:null,stampVao:null,
   undo:[],budget:640*1024*1024,error:'',live:{},
   init(){
@@ -82,6 +82,9 @@ const Engine={
       cv.width=s.res[0];cv.height=s.res[1];this.error='';return true;
     }catch(e){made.forEach(kill);this.error='GPU allocation failed; kept previous quality. '+e.message;return false}
   },
+  /* The sheet's edges. Wrap (Wrap canvas, or Edges = Wrap): what leaves one side comes back on the other. Open (Infinite canvas): what leaves is gone and
+     nothing comes in, so past the sheet there is only void. Otherwise walls. */
+  applyEdges(){const w=!!(P.edges||(P.cvs|0)===2);this.setWrap(w);this.open=!w&&(P.cvs|0)===1},
   setWrap(on){if(on===this.wrap)return;this.wrap=on;for(const t of[this.vel,this.prs,this.div,this.crl,this.dye,this.fwd])t&&setWrap(t,on)},
   refTx(){const a=this.sim[0]/this.sim[1],sx=a>=1?a:1,sy=a>=1?1:1/a;return[1/(REF*sx*this.world),1/(REF*sy*this.world)]},
 
@@ -110,14 +113,14 @@ const Engine={
     else{pass('curl.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world)},this.crl);
       pass('vorticity.frag',{uVel:this.vel.r,uCurl:this.crl,uTx:tx,uCurlStr:P.curl*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w)}
     this.vel.swap();
-    pass('divergence.frag',{uVel:this.vel.r,uTx:tx,uWalls:this.wrap?0:1},this.div);
+    pass('divergence.frag',{uVel:this.vel.r,uTx:tx,uWalls:this.wrap||this.open?0:1},this.div);
     if(LEAN){for(let i=0,n=Math.max(1,Math.ceil(Gov.iters(dt)/2));i<n;i++){pass('pressure2.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx,uS:i?1:.8},this.prs.w);this.prs.swap()}}
     else{pass('copy.frag',{uSrc:this.prs.r,uScale:.8},this.prs.w);this.prs.swap();
       for(let i=0,it=Gov.iters(dt);i<it;i++){pass('pressure.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx},this.prs.w);this.prs.swap()}}
     pass('gradient.frag',{uP:this.prs.r,uVel:this.vel.r,uTx:tx},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.vel.r,uRefTx:ref,uDt:dt,uDiss:P.vel},this.vel.w);this.vel.swap();
-    pass('advect.frag',{uVel:this.vel.r,uSrc:this.dye.r,uRefTx:ref,uDt:dt,uDiss:0},this.fwd);
-    pass('maccormack.frag',{uVel:this.vel.r,uSrc:this.dye.r,uFwd:this.fwd,uRefTx:ref,uSrcTx:[1/this.ink[0],1/this.ink[1]],uDt:dt,uDiss:P.den*FADE,uSub:(.006+.008*P.den)*FADE},this.dye.w);this.dye.swap();
+    pass('advect.frag',{uVel:this.vel.r,uSrc:this.dye.r,uRefTx:ref,uDt:dt,uDiss:0,uOpen:this.open?1:0},this.fwd);
+    pass('maccormack.frag',{uVel:this.vel.r,uSrc:this.dye.r,uFwd:this.fwd,uRefTx:ref,uSrcTx:[1/this.ink[0],1/this.ink[1]],uDt:dt,uDiss:P.den*FADE,uSub:(.006+.008*P.den)*FADE,uOpen:this.open?1:0},this.dye.w);this.dye.swap();
   },
 
   particles(dt,P,emit,time,palette,paused,fdt){
