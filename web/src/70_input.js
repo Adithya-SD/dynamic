@@ -91,9 +91,12 @@ const Music={
     audio.onSeek=()=>this.resetSync();
     audio.onHint=(msg,loud)=>{if(msg){UI.audioStatus.textContent=msg;if(loud)notice(msg,4200)}else UI.audioStatus.textContent=({mic:'Listening to the microphone',desktop:'Listening to shared audio'}[audio.state]||'Listening')+'. Finding the beat…'};
     if(NATIVE){window.__nativeBands=(l)=>{const t=performance.now()/1000,s=this.nsig.push(l,t,null);this.ingest({time:t,levels:s.levels,onsets:s.onsets,odf:s.odf,raw:l})};
-      window.__nativeAudio=(on,text)=>{this.native=on;this.resetSync();UI.audioStatus.textContent=text;[...UI.srcBtns.children].forEach(b=>b.classList.toggle('on',on?b.dataset.kind==='desktop':b.dataset.kind==='off'))}}
+      window.__nativeAudio=(on,text)=>{this.native=on;this.resetSync();UI.audioStatus.textContent=text;
+        // Some apps keep their audio out of the phone's capture: if nothing is heard for a few seconds, listen with the microphone instead.
+        clearTimeout(this.nfb);if(on&&/^No audio heard/.test(text))this.nfb=setTimeout(()=>{if(this.native&&/^No audio heard/.test(UI.audioStatus.textContent)){NATIVE.stopPlaybackCapture();audio.select('mic').then(()=>notice('This phone keeps that audio private, so Dynamic is listening with the microphone.',5200)).catch(e=>notice(e.message||String(e)))}},5000);
+[...UI.srcBtns.children].forEach(b=>b.classList.toggle('on',on?b.dataset.kind==='desktop':b.dataset.kind==='off'))}}
     audio.onState=s=>{const ok=['mic','desktop','file','stream'].includes(s.state);this.resetSync();
-      UI.audioStatus.textContent=s.state==='error'?s.detail:ok?{mic:'Listening to the microphone',desktop:'Listening to shared audio',file:'Playing your file',stream:'Playing the stream'}[s.state]+(s.detail?.degraded?' (analyser fallback, slower)':'')+'. Finding the beat…':'Pick a source. Tab audio is best: Chrome → share a tab (or Entire screen for apps like Spotify) and tick “Share audio”.';
+      UI.audioStatus.textContent=s.state==='error'?s.detail:ok?{mic:'Listening to the microphone',desktop:'Listening to shared audio',file:'Playing your file',stream:'Playing the stream'}[s.state]+(s.detail?.degraded?' (analyser fallback, slower)':'')+'. Finding the beat…':(NATIVE?'Pick a source. Phone audio hears what the phone plays (choose Share entire screen); the microphone hears the room.':'Pick a source. Tab audio is best: Chrome → share a tab (or Entire screen for apps like Spotify) and tick “Share audio”.');
       [...UI.srcBtns.children].forEach(b=>b.classList.toggle('on',b.dataset.kind===(ok?s.state:'off')));UI.fileRow.hidden=!['file','stream'].includes(s.state)};
   },
   native:false,

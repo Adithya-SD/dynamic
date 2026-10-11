@@ -13,6 +13,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
+import android.media.audiofx.Visualizer
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Handler
@@ -144,6 +145,7 @@ class PlaybackCaptureService : Service() {
 
     private fun capture(target: Run, config: AudioPlaybackCaptureConfiguration) {
         var recorder: AudioRecord? = null
+        var viz: Visualizer? = null
         try {
             val min = AudioRecord.getMinBufferSize(48000, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT)
             require(min > 0) { "capture format unavailable" }
@@ -157,6 +159,8 @@ class PlaybackCaptureService : Service() {
             val pcm = ByteBuffer.allocateDirect(1024).order(ByteOrder.LITTLE_ENDIAN)
             var lastSignal = System.nanoTime()
             var warned = false
+            var statAt = System.nanoTime(); var statFrames = 0L; var statPeak = 0   // logged every 2 s: tells silence from no data at all
+            var vizTried = false
             recorder.startRecording()
             main.post { if (target.active.get()) target.onStatus("Listening to phone audio") }
             while (target.active.get()) {
@@ -164,14 +168,22 @@ class PlaybackCaptureService : Service() {
                 val read = recorder.read(pcm, pcm.capacity(), AudioRecord.READ_NON_BLOCKING)
                 if (read < 0) error("capture interrupted ($read)")
                 if (read == 0) { Thread.sleep(2); continue }
-                target.onPcm(pcm, read)
                 val now = System.nanoTime()
                 var signal = false
-                for (o in 0 until read step 2) if (kotlin.math.abs(pcm.getShort(o).toInt()) > 8) { signal = true; break }
+                for (o in 0 until read step 2) { val a = kotlin.math.abs(pcm.getShort(o).toInt()); if (a > statPeak) statPeak = a; if (a > 8) signal = true }
+                statFrames += read / 4
+                // Some apps (Spotify on this phone) are delivered to the capture as pure silence. After 3 s of that, listen to the output mix instead.
+                if (viz == null && !vizTried && !signal && now - lastSignal >= 3_000_000_000L) {
+                    vizTried = true; viz = startVisualizer(target)
+                    if (viz != null) main.post { if (target.active.get()) target.onStatus("Listening to the phone's output (low detail)") }
+                    else main.post { if (target.active.get()) target.onStatus("No audio heard. Play music, or try the microphone") }
+                }
+                if (signal || viz == null) target.onPcm(pcm, read)   // while the output mix is the source, the silent capture is not fed in
+                if (now - statAt >= 2_000_000_000L) { android.util.Log.i("Dynamic", "phone audio: $statFrames frames in 2 s, peak $statPeak"); statAt = now; statFrames = 0; statPeak = 0 }
                 if (signal) {
                     lastSignal = now
                     if (warned) { warned = false; main.post { if (target.active.get()) target.onStatus("Listening to phone audio") } }
-                } else if (!warned && now - lastSignal >= 3_000_000_000L) {
+                } else if (!warned && viz == null && now - lastSignal >= 3_000_000_000L) {   // not once the output mix is the source
                     warned = true
                     main.post { if (target.active.get()) target.onStatus("No audio heard. Play music, or try the microphone") }
                 }
@@ -181,6 +193,32 @@ class PlaybackCaptureService : Service() {
         } finally {
             try { recorder?.stop() } catch (_: IllegalStateException) { }
             recorder?.release()
+            try { viz?.enabled = false; viz?.release() } catch (_: Exception) { }
+        }
+    }
+
+    /** The phone's output mix as 8-bit waveforms (about 20 a second): coarse, but it does not depend on the playing app allowing capture. */
+    private fun startVisualizer(target: Run): Visualizer? {
+        return try {
+            val v = Visualizer(0)
+            v.enabled = false
+            v.captureSize = Visualizer.getCaptureSizeRange()[1]
+            val buf = ByteBuffer.allocateDirect(v.captureSize * 4).order(ByteOrder.LITTLE_ENDIAN)
+            android.util.Log.i("Dynamic", "visualizer: ready, ${v.samplingRate / 1000} Hz, ${v.captureSize} samples")
+            v.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                override fun onWaveFormDataCapture(vis: Visualizer?, wave: ByteArray, samplingRate: Int) {
+                    if (!target.active.get()) return
+                    buf.clear()
+                    for (b in wave) { val s = (((b.toInt() and 0xFF) - 128) shl 8).toShort(); buf.putShort(s); buf.putShort(s) }
+                    target.onPcm(buf, wave.size * 4)
+                }
+                override fun onFftDataCapture(vis: Visualizer?, fft: ByteArray, samplingRate: Int) {}
+            }, Visualizer.getMaxCaptureRate(), true, false)
+            v.enabled = true
+            v
+        } catch (e: Throwable) {
+            android.util.Log.i("Dynamic", "visualizer unavailable: $e")
+            null
         }
     }
 

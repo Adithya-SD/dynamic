@@ -233,7 +233,10 @@ open class MainActivity : Activity() {
     private fun askProjection() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFY)
-        startActivityForResult(getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent(), REQ_CAPTURE)
+        // Only the sound is wanted: on Android 14+ ask for the whole screen so the prompt does not offer "Share one app" (which hears nothing useful).
+        val mpm = getSystemService(MediaProjectionManager::class.java)
+        val intent = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent()
+        startActivityForResult(intent, REQ_CAPTURE)
     }
 
     @Deprecated("Result routing for file picker and projection consent")
@@ -247,14 +250,18 @@ open class MainActivity : Activity() {
 
     // ---- phone audio: PCM -> 24 bands (same analysis as the web app) -> JS ----
 
+    @Volatile private var vizMode = false
+    private var lastVizSend = 0L
+
     private fun beginCapture(resultCode: Int, data: Intent) {
         stopCapture()
+        vizMode = false
         val mono = FloatArray(256)
         batchCount = 0
         val analyzer = Bands(48000) { levels, onsets -> report(levels, onsets) }
         bands = analyzer
         val run = PlaybackCaptureService.Run(
-            onStatus = { text -> main.post { audioStatus(text.startsWith("Listening") || text.startsWith("No audio"), text) } },
+            onStatus = { text -> main.post { vizMode = text.contains("output"); audioStatus(text.startsWith("Listening") || text.startsWith("No audio"), text) } },
             onPcm = { buf, bytes ->
                 var i = 0
                 val frames = bytes / 4
@@ -282,8 +289,8 @@ open class MainActivity : Activity() {
     private fun report(levels: FloatArray, onsets: FloatArray) {
         PadOut.feed(levels, onsets)   // controller rumble at the full analysis rate, independent of the page
         for (b in 0 until 24) { batch[b] = levels[b]; if (onsets[b] > batchOnsets[b]) batchOnsets[b] = onsets[b] }
-        if (++batchCount < 3) return
-        batchCount = 0
+        if (vizMode) { val t = android.os.SystemClock.uptimeMillis(); if (t - lastVizSend < 30) return; lastVizSend = t }
+        else { if (++batchCount < 3) return; batchCount = 0 }
         if (!sending.compareAndSet(false, true)) { batchOnsets.fill(0f); return }
         val sb = StringBuilder(640).append("window.__nativeBands&&__nativeBands([")
         for (b in 0 until 24) { if (b > 0) sb.append(','); sb.append((batch[b] * 1000).toInt() / 1000f) }

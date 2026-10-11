@@ -16,6 +16,6 @@ try {
         $args=@(); if($DeviceSerial){$args+=@('-s',$DeviceSerial)}
         & $adb @args install -r 'app\build\outputs\apk\debug\app-debug.apk'
         if($LASTEXITCODE -ne 0){throw 'APK installation failed'}
-        & $adb @args shell monkey -p dev.dynamic.app -c android.intent.category.LAUNCHER 1 | Out-Null
+        & $adb @args shell am start -n dev.dynamic.app/dev.dynamic.MainActivity | Out-Null   # Dynamic itself (the Pad is a second launcher icon)
     }
 }finally{Pop-Location}

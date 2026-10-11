@@ -15,7 +15,7 @@ UI={
     for(const[i,[id,label]]of SCHEMA.tabs.entries()){if(i===0)continue;
       const panel=this.panels[i];panel.style.setProperty('--ac',ACCENT[id]||'#fff');
       if(id==='quick'){this.buildQuick(panel);continue}
-      if(id==='music')this.buildMusicHead(panel);
+      if(id==='music'){this.buildSpotify(panel);this.buildMusicHead(panel)}   // what is playing comes first
       let group='',G=null;
       for(const d of SCHEMA.params){if(d.tab!==id||d.hide)continue;
         if(d.g!==group){this.closeGroup(G,panel);group=d.g;G=this.openGroup(panel,group,id)}
@@ -26,7 +26,6 @@ UI={
         if(d.help){const p=el('p','help hint');p.textContent=d.help;row.append(p);const ib=el('button','ib','i');ib.type='button';ib.setAttribute('aria-label','What is '+d.l+'?');ib.onclick=e=>{e.stopPropagation();row.classList.toggle('hl')};row.append(ib)}   // help hides behind an (i)
       }
       this.closeGroup(G,panel);
-      if(id==='music')this.buildSpotify(panel);
       if(id==='system')this.buildSystem(panel);
     }
     this.buildDock();
@@ -373,7 +372,7 @@ UI={
   /* Hide on idle / while drawing: the interface becomes ink (Engine.uiBegin) and the fluid carries it off; the real
      panels fade out underneath in 0.6 s. Wake reverses it quickly. */
   fade(dt){
-    const editing=this.open||$('#dlg').open,autoOn=P.auto>0||P.cyc||Music.active();
+    const editing=this.open||this.pop||$('#dlg').open,autoOn=P.auto>0||P.cyc||Music.active();
     const want=P.uh&&!editing&&(Input.down()||(autoOn&&performance.now()-this.lastInput>3500));
     if(this.waking){this.dissolve=Math.max(0,this.dissolve-dt/.35);this.applyFade();if(!this.dissolve){this.waking=false}return}
     if(want&&!this.dissolving&&!this.hidden){this.captureMask();Engine.uiBegin(this.mask);this.dissolving=true}
@@ -392,7 +391,7 @@ UI={
   captureMask(){
     const w=Math.round(VW()),h=Math.round(VH()),c=this.maskCanvas||(this.maskCanvas=el('canvas'));c.width=w;c.height=h;const x=c.getContext('2d');x.clearRect(0,0,w,h);
     for(const panel of this.G){
-      if(panel.id==='dlg'&&!panel.open||panel.id==='note'&&panel.hidden||panel.id==='sh'&&!this.open)continue;
+      if(panel.id==='dlg'&&!panel.open||panel.id==='note'&&panel.hidden||panel.id==='sh'&&!this.open||+getComputedStyle(panel).opacity<.05)continue;   // a closed panel is not on screen: it must not melt
       const r=panel.getBoundingClientRect(),rad=+panel.dataset.r||r.height/2;x.save();x.beginPath();x.roundRect(r.x,r.y,r.width,r.height,rad);x.clip();x.fillStyle='rgba(170,195,230,.14)';x.fillRect(r.x,r.y,r.width,r.height);x.strokeStyle='rgba(255,255,255,.3)';x.lineWidth=2.5;x.stroke();
       const walk=document.createTreeWalker(panel,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT);let node;
       while((node=walk.nextNode())){
