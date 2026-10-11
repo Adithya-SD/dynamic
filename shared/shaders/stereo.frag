@@ -1,7 +1,7 @@
 // Stereoscopic 3D. There is no real depth in a fluid picture, so depth is made from what the picture contains: bright ink and
 // particles stand in front, the dark background recedes, a ball is a real sphere in front of its backdrop. Each eye sees the
 // picture shifted sideways by (depth - focus) * separation (an inverse warp), which is what a second camera would see.
-//   uMode 1 anaglyph (red/cyan glasses, Dubois matrices), 2 side by side (each eye squeezed into its half: 3D TVs, projectors,
+//   uMode 1 anaglyph (red/cyan glasses, Dubois matrices), 2 side by side (each eye is the middle of the picture at its true proportions, a crop and never a squeeze: 3D TVs, projectors,
 //   cross-eyed viewing with Swap), 3 VR headset (each eye a centred crop in its half, lens pre-distortion, for phone viewers).
 in vec2 v;out vec4 o;
 uniform sampler2D uImg,uBloom,uFarA,uFarB;
@@ -36,7 +36,7 @@ void main(){
   }
   bool right=v.x>=.5;vec2 e=vec2(fract(v.x*2.),v.y);
   float side=(right?1.:-1.)*sw;
-  if(uMode<2.5){o=vec4(eye(e,side),1.);return;}   // side by side
+  if(uMode<2.5){o=vec4(eye(vec2(.5+(e.x-.5)*.5,e.y),side),1.);return;}   // side by side: the middle half of the picture fills each half of the screen, so nothing is stretched
   // VR headset: a centred crop with the eye's aspect, pushed through the lens correction
   vec2 c=e-.5;float asp=uRes.x*.5/uRes.y,k=uLens*.5;
   vec2 cr=vec2(c.x*asp,c.y);cr*=1.+k*dot(cr,cr)*1.6;c=vec2(cr.x/asp,cr.y);

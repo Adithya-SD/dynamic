@@ -67,8 +67,11 @@ svg{fill:none;stroke:#fff;stroke-linecap:round;stroke-linejoin:round}
 .sl>span{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px;opacity:.9;font-size:13px}
 .sl em{font-style:normal;opacity:.6;font-variant-numeric:tabular-nums}
 .padcur{position:fixed;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;border:1.5px solid #fffc;box-shadow:0 0 12px #fff8,inset 0 0 6px #fff6;pointer-events:none;z-index:4;opacity:0;transition:opacity .4s;mix-blend-mode:screen}.padcur.b{border-color:#9ef}.padcur.on{opacity:.85}
+.sl .rs{display:none;place-items:center;width:26px;height:26px;margin:-5px 0 -5px 8px;border-radius:13px;vertical-align:middle;background:rgba(255,255,255,.16);transition:background .2s,transform .2s}
+.sl.chg .rs{display:inline-grid}.sl .rs:active{background:rgba(255,255,255,.38);transform:scale(.9)}.sl .rs svg{width:14px;height:14px;stroke-width:2.2}
 .sl .dot{display:inline-block;width:5px;height:5px;border-radius:3px;background:#fff;margin:0 0 2px 6px;opacity:0;transition:opacity .3s;vertical-align:middle}
 .sl.chg .dot,.sw.chg .dot{opacity:.75}
+.sl .dot{display:none}   /* a slider shows its reset button instead of the changed dot */
 .tr{position:relative;height:42px;touch-action:pan-y;--q:.5;outline:0}
 .tr:before{content:"";position:absolute;left:0;right:0;top:50%;height:8px;margin-top:-4px;border-radius:4px;background:var(--tk,rgba(255,255,255,.2));box-shadow:inset 0 1px 2px #0005;transition:height .35s,margin .35s}
 .fl{position:absolute;left:0;top:50%;height:8px;margin-top:-4px;border-radius:4px;background:var(--fc,#fff);width:calc(14px + (100% - 28px)*var(--q));transition:height .35s,margin .35s}

@@ -60,6 +60,9 @@ UI={
     const mk=MUSIC_LINKED[d.k];
     row.innerHTML=`<span><label>${d.l}<i class="dot"></i>${mk?`<i class="mk" title="The music moves this on ${mk}">♪</i>`:''}</label><em></em></span><div class="tr" role="slider" tabindex="0" aria-label="${d.l}" aria-valuemin="${d.min}" aria-valuemax="${d.max}"><i class="df"></i><i class="fl"></i><b class="kn"></b></div>`+(d.ends?`<small class="ends"><span>${d.ends[0]}</span><span>${d.ends[1]}</span></small>`:'');
     if(d.dial)row.classList.add('dial');
+    // A slider that differs from its preset shows a small reset button next to its name: one tap puts it back (double-tapping the name still works).
+    {const rs=el('button','rs',svgIcon('M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5'));rs.type='button';rs.setAttribute('aria-label','Reset '+d.l);rs.title='Back to the preset value';
+      rs.onclick=e=>{e.stopPropagation();this.change(d.k,B[d.k]);haptic(8)};row.querySelector('label').append(rs)}
     const tr=row.querySelector('.tr'),kn=row.querySelector('.kn'),em=row.querySelector('em'),fl=row.querySelector('.fl'),k=d.k;
     const fmt=d.fmt||(v=>(+v).toFixed(dec)+(d.u||''));
     const ui=()=>{tr.style.setProperty('--b',clamp((B[k]-d.min)/(d.max-d.min),0,1));tr.style.setProperty('--q',(P[k]-d.min)/(d.max-d.min));em.textContent=fmt(P[k]);tr.setAttribute('aria-valuenow',P[k]);
