@@ -44,24 +44,33 @@ Gov.raf=__noop;Gov.refresh=30;Gov.throttled=()=>false;
 
 const App={
   paused:false,snap:false,rec:null,displayHue:0,look:{exposure:1,hue:0,bloom:0,echoZoom:0,echoTwist:0,time:0},
-  last:0,frames:0,fpsT:0,fps:0,cpu:0,ready:false,started:false,
+  last:0,frames:0,fpsT:0,fps:0,cpu:0,ready:false,started:false,prof:{logic:0,step:0,parts:0,render:0,gpu:0,n:0,m:0},
   start(){
-    if(this.started)return;this.started=true;
+    if(this.started)return;this.started=true;const T0=performance.now(),lap=n=>console.log('boot '+n+' '+Math.round(performance.now()-T0)+' ms');
     Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||P.cvs);this.cvsSeen=P.cvs|0;
     // First run on the watch: light quality, no interface effects, a bit more wrist pour; start on Infinity.
     if(!store.get('dynamic.watchinit',0)){store.set('dynamic.watchinit',1);P.qual=4;P.uh=0;P.st=0;P.tflow=.5;persist();const i=allPresets().findIndex(x=>x.n==='Infinity');if(i>=0)applyPreset(i)}
     Gov.cap=30;
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){__host.emit('error',Engine.error);return}}
+    lap('allocated '+Engine.res.join('x')+' sim '+Engine.sim.join('x')+' ink '+Engine.ink.join('x'));
     Input.init();Tilt.init();Eyes.init();Music.init();
     Space.update(P,0,Engine.res,Engine.world,0);
     Engine.warm().then(errors=>{
+      lap('shaders ready ('+programs.size+' programs, '+[...programs.values()].filter(e=>e.cached).length+' cached) on '+gl.getParameter(gl.RENDERER)+' '+gl.getParameter(gl.VERSION));
       if(errors.length){__host.emit('error','A shader was rejected by this watch: '+errors[0].slice(0,300));return}
       this.ready=true;this.last=performance.now();__host.emit('ready',allPresets()[current].n);
     });
   },
   frame(now){
     if(!this.ready)return false;
+    // every 6 s, time one whole frame pass by pass (the full GPU wait makes that frame slow, so it is shown separately)
+    cv.prof=now-(this.profT||0)>6000&&this.fps>0;
+    if(!cv.prof&&this.profT&&Object.keys(cv.passMs).length){const rows=Object.entries(cv.passMs).sort((a,b)=>b[1][0]-a[1][0]),tot=rows.reduce((x,r)=>x+r[1][0],0);
+      console.log('passes ('+tot.toFixed(0)+' ms with a GPU wait after each): '+rows.slice(0,12).map(([k,v])=>k+' '+v[0].toFixed(1)+(v[1]>1?' ('+v[1]+')':'')).join(' | '));cv.passMs={}}
+    if(cv.prof)this.profT=now;
+    const sf=__host.surface();cv.sw=sf[0];cv.sh=sf[1];
     this.tick(now);
+    if(now-(this.logT||0)>3000){this.logT=now;{const q=this.prof,n=Math.max(q.n,1);console.log('prof ms/frame: logic '+(q.logic/n).toFixed(1)+' step '+(q.step/n).toFixed(1)+' particles '+(q.parts/n).toFixed(1)+' render '+(q.render/n).toFixed(1)+' gpu-wait '+(q.gpu/Math.max(q.m,1)).toFixed(1));q.logic=q.step=q.parts=q.render=q.gpu=q.n=q.m=0;console.log('gl '+__host.glStats()+' | screen bind '+((cv.screenMs||0)/n).toFixed(1)+' ms/frame');cv.screenMs=0}console.log('fps '+this.fps.toFixed(1)+' cpu '+this.cpu.toFixed(1)+' ms render '+Engine.res.join('x')+' sim '+Engine.sim.join('x')+' ink '+Engine.ink.join('x')+' surface '+cv.sw+'x'+cv.sh+' '+allPresets()[current].n)}
     if(cv.dirty){cv.dirty=false;__host.emit('size',cv.width+','+cv.height)}
     return true;
   },
@@ -83,6 +92,7 @@ const App={
     if(Space.pendingShift){Engine.scrollSheet(Space.pendingShift);Space.pendingShift=null}
     Input.frame(dt);
     Engine.flushStamps(P.bt);
+    const pa=performance.now();
 
     const L=this.look;
     this.displayHue+=P.hdrift*dt*.6;
@@ -99,11 +109,16 @@ const App={
       Geo.inject(dt,E);
       for(let i=0;i<n;i++)Engine.step(h,E,field);
     }
+    const pb=performance.now();
     Engine.uiStep(dt,dt*PACE*P.ts*musicSpeed);
     const ps=Input.ptr.size?[...Input.ptr.values()][0]:null,emit=ps?[Input.emitAt[0],Input.emitAt[1],1,.06]:[0,0,0,0];
     Engine.particles(dt*PACE*P.ts*Math.min(1,musicSpeed),E,emit,clock,paletteUniforms(),this.paused,dt);
+    const pc=performance.now();
     const dpr=Engine.res[0]/VW(),glass=UI.glass(dpr);
     Engine.render(E,L,glass,true);Exposure.sample(dt);
+    const pd=performance.now(),pf=this.prof;
+    pf.logic+=pa-t0;pf.step+=pb-pa;pf.parts+=pc-pb;pf.render+=pd-pc;pf.n++;
+    if((this.frames&7)===0){gl.finish();pf.gpu+=performance.now()-pd;pf.m++}   // how long the GPU is still busy after the last call: ~0 means the script is the bottleneck
     this.cpu=this.cpu*.9+(performance.now()-t0)*.1;
   }
 };

@@ -1,4 +1,5 @@
-// Shared helpers. Hosts prepend: #version 300 es + highp precision for float, int, sampler2D.
+// Shared helpers. Hosts prepend: #version 300 es + highp precision for float, int, sampler2D + #define SIMP (the precision of the
+// simulation passes: highp, or mediump on the watch).
 const float PI=3.14159265359;
 const float TAU=6.28318530718;
 const float PHI=1.61803398875;

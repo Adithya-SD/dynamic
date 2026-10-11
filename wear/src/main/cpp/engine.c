@@ -11,6 +11,7 @@
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <GLES3/gl3.h>
+#include <EGL/egl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,6 +67,7 @@ static const float *floats_of(JSContext *c, JSValueConst v, int *n, float *tmp, 
 #define GF(i) F(c, ARG(i))
 #define RET_ID(x) return JS_NewInt32(c, (int)(x))
 
+static void safe_name(const char *in, char *out, size_t n);
 /* ---------- shaders and programs ---------- */
 FN(createProgram) { RET_ID(glCreateProgram()); }
 FN(createShader) { RET_ID(glCreateShader(GI(0))); }
@@ -75,7 +77,47 @@ FN(attachShader) { glAttachShader(ID(0), ID(1)); return JS_UNDEFINED; }
 FN(detachShader) { glDetachShader(ID(0), ID(1)); return JS_UNDEFINED; }
 FN(deleteShader) { glDeleteShader(ID(0)); return JS_UNDEFINED; }
 FN(deleteProgram) { glDeleteProgram(ID(0)); return JS_UNDEFINED; }
-FN(linkProgram) { glLinkProgram(ID(0)); return JS_UNDEFINED; }
+FN(linkProgram) { glProgramParameteri(ID(0), GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE); glLinkProgram(ID(0)); return JS_UNDEFINED; }
+
+/* Compiled programs are kept on disk (keyed by a hash of their source and by this GPU/driver), so only the first launch pays for
+   compiling the shaders. A binary the driver no longer accepts simply fails to load and the shader is compiled again. */
+static unsigned drv_hash(void) {
+    static unsigned h; if (h) return h;
+    const char *a = (const char *)glGetString(GL_RENDERER), *b = (const char *)glGetString(GL_VERSION); h = 2166136261u;
+    for (const char *p = a; p && *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
+    for (const char *p = b; p && *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
+    return h ? h : 1;
+}
+static void bin_path(JSContext *c, JSValueConst key, char *out, size_t n) {
+    const char *k = JS_ToCString(c, key); char nm[64]; safe_name(k ? k : "x", nm, sizeof nm); if (k) JS_FreeCString(c, k);
+    snprintf(out, n, "%s/shaders-%s-%08x.bin", files_dir, nm, drv_hash());
+}
+FN(loadProgramBinary) {
+    char path[768]; bin_path(c, ARG(1), path, sizeof path);
+    FILE *f = fopen(path, "rb"); if (!f) return JS_FALSE;
+    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    if (n < 8) { fclose(f); return JS_FALSE; }
+    uint8_t *b = malloc(n); size_t got = fread(b, 1, n, f); fclose(f);
+    GLenum fmt; memcpy(&fmt, b, 4);
+    GLuint p = ID(0); GLint ok = 0;
+    if (got == (size_t)n) { glProgramBinary(p, fmt, b + 4, (GLsizei)(n - 4)); glGetProgramiv(p, GL_LINK_STATUS, &ok); }
+    free(b);
+    if (!ok) remove(path);
+    return JS_NewBool(c, ok != 0);
+}
+FN(saveProgramBinary) {
+    GLuint p = ID(0); GLint len = 0; glGetProgramiv(p, GL_PROGRAM_BINARY_LENGTH, &len);
+    if (len <= 0) return JS_FALSE;
+    uint8_t *b = malloc(len + 4); GLsizei got = 0; GLenum fmt = 0;
+    glGetProgramBinary(p, len, &got, &fmt, b + 4);
+    int ok = 0;
+    if (got > 0) {
+        char path[768], tmp[800]; bin_path(c, ARG(1), path, sizeof path); snprintf(tmp, sizeof tmp, "%s.tmp", path);
+        FILE *f = fopen(tmp, "wb");
+        if (f) { memcpy(b, &fmt, 4); ok = fwrite(b, 1, (size_t)got + 4, f) == (size_t)got + 4; fclose(f); if (ok) rename(tmp, path); }
+    }
+    free(b); return JS_NewBool(c, ok);
+}
 FN(useProgram) { glUseProgram(ID(0)); return JS_UNDEFINED; }
 FN(getProgramParameter) {
     GLint v = 0; int p = GI(1); glGetProgramiv(ID(0), p, &v);
@@ -210,9 +252,10 @@ static const struct { const char *n; int v; } consts[] = {
     K(ONE_MINUS_SRC_ALPHA), K(MAX_TEXTURE_SIZE), K(RENDERER), K(VERSION), K(VENDOR), K(DEPTH_TEST), K(CULL_FACE),
 };
 #define M(n) { #n, gl_##n, 0 }
+#define NFN 80
 static const struct { const char *n; JSCFunction *f; int dummy; } fns[] = {
     M(createProgram), M(createShader), M(shaderSource), M(compileShader), M(attachShader), M(detachShader), M(deleteShader), M(deleteProgram), M(linkProgram),
-    M(useProgram), M(getProgramParameter), M(getShaderParameter), M(getProgramInfoLog), M(getShaderInfoLog), M(getActiveUniform), M(getUniformLocation),
+    M(useProgram), M(loadProgramBinary), M(saveProgramBinary), M(getProgramParameter), M(getShaderParameter), M(getProgramInfoLog), M(getShaderInfoLog), M(getActiveUniform), M(getUniformLocation),
     M(uniform1i), M(uniform1f), M(uniform1fv), M(uniform2fv), M(uniform3fv), M(uniform4fv), M(uniformMatrix3fv),
     M(createTexture), M(deleteTexture), M(bindTexture), M(activeTexture), M(texParameteri), M(texStorage2D), M(generateMipmap), M(pixelStorei), M(texImage2D), M(texSubImage2D),
     M(createFramebuffer), M(deleteFramebuffer), M(bindFramebuffer), M(framebufferTexture2D), M(checkFramebufferStatus), M(viewport), M(clearColor), M(clear), M(readPixels),
@@ -221,6 +264,27 @@ static const struct { const char *n; JSCFunction *f; int dummy; } fns[] = {
     M(getParameter), M(getExtension),
 };
 
+/* Time spent inside the GL bridge, per function: the app can tell script time from driver time (__host.glStats). */
+static unsigned long long gl_ns[NFN], gl_cnt[NFN];
+static inline unsigned long long now_ns(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return (unsigned long long)ts.tv_sec * 1000000000ull + (unsigned long long)ts.tv_nsec; }
+static JSValue gl_tramp(JSContext *c, JSValueConst t, int argc, JSValueConst *argv, int magic) {
+    unsigned long long t0 = now_ns();
+    JSValue r = fns[magic].f(c, t, argc, argv);
+    gl_ns[magic] += now_ns() - t0; gl_cnt[magic]++;
+    return r;
+}
+/* "calls N in-GL ms X | name ms (count) ..." for the busiest functions, then resets. */
+static JSValue host_glstats(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    size_t n = sizeof fns / sizeof fns[0]; unsigned long long tot = 0, calls = 0; int top[6] = { -1, -1, -1, -1, -1, -1 };
+    for (size_t i = 0; i < n; i++) {
+        tot += gl_ns[i]; calls += gl_cnt[i];
+        for (int k = 0; k < 6; k++) if (top[k] < 0 || gl_ns[i] > gl_ns[top[k]]) { for (int j = 5; j > k; j--) top[j] = top[j - 1]; top[k] = (int)i; break; }
+    }
+    char buf[600]; int p = snprintf(buf, sizeof buf, "calls %llu in-GL %.1f ms |", calls, tot / 1e6);
+    for (int k = 0; k < 6 && top[k] >= 0; k++) p += snprintf(buf + p, sizeof buf - p, " %s %.1f (%llu)", fns[top[k]].n, gl_ns[top[k]] / 1e6, gl_cnt[top[k]]);
+    memset(gl_ns, 0, sizeof gl_ns); memset(gl_cnt, 0, sizeof gl_cnt);
+    return JS_NewString(c, buf);
+}
 /* ---------- host: clock, files, events, console ---------- */
 static JSValue host_now(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -229,6 +293,12 @@ static JSValue host_now(JSContext *c, JSValueConst t, int argc, JSValueConst *ar
 static void safe_name(const char *in, char *out, size_t n) {
     size_t i = 0; for (; in[i] && i + 1 < n; i++) out[i] = (in[i] >= 'a' && in[i] <= 'z') || (in[i] >= 'A' && in[i] <= 'Z') || (in[i] >= '0' && in[i] <= '9') || in[i] == '.' || in[i] == '-' ? in[i] : '_';
     out[i] = 0;
+}
+/* Size of the surface being drawn to (it can differ from the engine's render size for a few frames after a change). */
+static JSValue host_surface(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    EGLint w = 0, h = 0; EGLDisplay d = eglGetCurrentDisplay(); EGLSurface sf = eglGetCurrentSurface(EGL_DRAW);
+    if (d != EGL_NO_DISPLAY && sf != EGL_NO_SURFACE) { eglQuerySurface(d, sf, EGL_WIDTH, &w); eglQuerySurface(d, sf, EGL_HEIGHT, &h); }
+    JSValue a = JS_NewArray(c); JS_SetPropertyUint32(c, a, 0, JS_NewInt32(c, w)); JS_SetPropertyUint32(c, a, 1, JS_NewInt32(c, h)); return a;
 }
 static JSValue host_read(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     const char *k = JS_ToCString(c, ARG(0)); if (!k) return JS_NULL;
@@ -292,12 +362,14 @@ static void run_jobs(void) {
 static void setup_globals(void) {
     JSValue g = JS_GetGlobalObject(ctx);
     JSValue gl = JS_NewObject(ctx);
-    for (size_t i = 0; i < sizeof fns / sizeof fns[0]; i++) JS_SetPropertyStr(ctx, gl, fns[i].n, JS_NewCFunction(ctx, fns[i].f, fns[i].n, 0));
+    for (size_t i = 0; i < sizeof fns / sizeof fns[0]; i++) JS_SetPropertyStr(ctx, gl, fns[i].n, JS_NewCFunctionMagic(ctx, gl_tramp, fns[i].n, 0, JS_CFUNC_generic_magic, (int)i));
     for (size_t i = 0; i < sizeof consts / sizeof consts[0]; i++) JS_SetPropertyStr(ctx, gl, consts[i].n, JS_NewInt32(ctx, consts[i].v));
     JS_SetPropertyStr(ctx, gl, "UNPACK_FLIP_Y_WEBGL", JS_NewInt32(ctx, 0x9240));
     JS_SetPropertyStr(ctx, g, "__gl", gl);
     JSValue host = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, host, "now", JS_NewCFunction(ctx, host_now, "now", 0));
+    JS_SetPropertyStr(ctx, host, "glStats", JS_NewCFunction(ctx, host_glstats, "glStats", 0));
+    JS_SetPropertyStr(ctx, host, "surface", JS_NewCFunction(ctx, host_surface, "surface", 0));
     JS_SetPropertyStr(ctx, host, "read", JS_NewCFunction(ctx, host_read, "read", 1));
     JS_SetPropertyStr(ctx, host, "write", JS_NewCFunction(ctx, host_write, "write", 2));
     JS_SetPropertyStr(ctx, host, "emit", JS_NewCFunction(ctx, host_emit, "emit", 2));
@@ -330,7 +402,7 @@ static char *call_global(const char *fn, int argc, const double *args, int want)
 /* ---------- JNI ---------- */
 #define JNI(name) JNIEXPORT JNICALL Java_dev_dynamic_watch_NativeEngine_##name
 
-JNIEXPORT jstring JNICALL Java_dev_dynamic_watch_NativeEngine_nativeInit(JNIEnv *env, jobject self, jobject assets, jstring jfiles, jobject host) {
+JNIEXPORT jstring JNICALL Java_dev_dynamic_watch_NativeEngine_nativeInit(JNIEnv *env, jobject self, jobject assets, jstring jfiles, jobject host, jboolean dev) {
     cur_env = env;
     const char *fd = (*env)->GetStringUTFChars(env, jfiles, NULL); snprintf(files_dir, sizeof files_dir, "%s", fd); (*env)->ReleaseStringUTFChars(env, jfiles, fd);
     if (host_obj) (*env)->DeleteGlobalRef(env, host_obj);
@@ -343,11 +415,19 @@ JNIEXPORT jstring JNICALL Java_dev_dynamic_watch_NativeEngine_nativeInit(JNIEnv 
     ctx = JS_NewContext(rt);
     setup_globals();
 
-    AAssetManager *am = AAssetManager_fromJava(env, assets);
-    AAsset *a = AAssetManager_open(am, "engine.js", AASSET_MODE_BUFFER);
-    if (!a) return (*env)->NewStringUTF(env, "engine.js is missing from the app");
-    size_t n = AAsset_getLength(a);
-    char *src = malloc(n + 1); memcpy(src, AAsset_getBuffer(a), n); src[n] = 0; AAsset_close(a);
+    char *src = NULL; size_t n = 0;
+    if (dev) {   /* debug builds only: a script pushed into the app's files folder replaces the bundled one (fast edits without a rebuild) */
+        char path[720]; snprintf(path, sizeof path, "%s/dev-engine.js", files_dir);
+        FILE *f = fopen(path, "rb");
+        if (f) { fseek(f, 0, SEEK_END); n = (size_t)ftell(f); fseek(f, 0, SEEK_SET); src = malloc(n + 1); n = fread(src, 1, n, f); src[n] = 0; fclose(f); LOG("using dev-engine.js (%zu bytes)", n); }
+    }
+    if (!src) {
+        AAssetManager *am = AAssetManager_fromJava(env, assets);
+        AAsset *a = AAssetManager_open(am, "engine.js", AASSET_MODE_BUFFER);
+        if (!a) return (*env)->NewStringUTF(env, "engine.js is missing from the app");
+        n = AAsset_getLength(a);
+        src = malloc(n + 1); memcpy(src, AAsset_getBuffer(a), n); src[n] = 0; AAsset_close(a);
+    }
     last_error[0] = 0;
     JSValue r = JS_Eval(ctx, src, n, "engine.js", JS_EVAL_TYPE_GLOBAL);
     free(src);

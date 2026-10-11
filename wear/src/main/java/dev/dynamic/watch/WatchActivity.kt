@@ -111,6 +111,7 @@ class WatchActivity : Activity(), NativeEngine.Host, WatchUi.Actions {
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        android.util.Log.i("Dynamic", "rotary input present: " + InputDevice.getDeviceIds().any { InputDevice.getDevice(it)?.supportsSource(InputDevice.SOURCE_ROTARY_ENCODER) == true })
         val root = FrameLayout(this)
         root.setBackgroundColor(Color.BLACK)
         glView = GLSurfaceView(this).apply {
@@ -139,13 +140,24 @@ class WatchActivity : Activity(), NativeEngine.Host, WatchUi.Actions {
             needInit = false
             screenW = glView.width.takeIf { it > 0 } ?: w
             screenH = glView.height.takeIf { it > 0 } ?: h
-            val err = NativeEngine.nativeInit(assets, filesDir.path, this@WatchActivity)
+            val err = NativeEngine.nativeInit(assets, filesDir.path, this@WatchActivity, (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
             if (err != null) { showError(err); return }
             NativeEngine.call("__resize", screenW.toDouble(), screenH.toDouble())
             NativeEngine.call("__start")
             NativeEngine.nativeLastError()?.let { showError(it) }
         }
-        override fun onDrawFrame(g: GL10?) { NativeEngine.call("__frame", System.nanoTime() / 1e6) }
+        private var lastDraw = 0L
+        private var acc = 0L
+        private var cnt = 0
+        override fun onDrawFrame(g: GL10?) {
+            val t = System.nanoTime()
+            NativeEngine.call("__frame", t / 1e6)
+            acc += System.nanoTime() - t; cnt++
+            if (t - lastDraw > 3_000_000_000L) {
+                if (lastDraw != 0L) android.util.Log.i("Dynamic", "draw calls: %d in 3 s, %.1f ms each inside the engine".format(cnt, acc / 1e6 / max(cnt, 1)))
+                lastDraw = t; acc = 0; cnt = 0
+            }
+        }
     }
 
     private fun showError(t: String) = runOnUiThread { splash.visibility = android.view.View.VISIBLE; splash.textSize = 11f; splash.text = t.take(400) }
@@ -240,7 +252,7 @@ class WatchActivity : Activity(), NativeEngine.Host, WatchUi.Actions {
                     activeIds.clear(); pointer(2, e, 0)
                     val now = SystemClock.uptimeMillis()
                     if (!moved && now - downAt < 350) {
-                        if (now - lastTap < 320) { lastTap = 0; haptic(15); cycle(1) } else lastTap = now
+                        if (now - lastTap < 320) { lastTap = 0; haptic(15); random() } else lastTap = now
                     }
                 }
                 swallow = false
@@ -256,17 +268,51 @@ class WatchActivity : Activity(), NativeEngine.Host, WatchUi.Actions {
 
     private fun palette(d: Int) = gl { NativeEngine.nativeEval("WatchApp.palette($d)") }
 
-    /** Crown / bezel: scrolls an open picker, otherwise changes preset. */
-    override fun onGenericMotionEvent(e: MotionEvent): Boolean {
-        if (e.action == MotionEvent.ACTION_SCROLL && e.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
-            val step = if (-e.getAxisValue(MotionEvent.AXIS_SCROLL) > 0) 1 else -1
-            val now = SystemClock.uptimeMillis()
-            if (ui.active) { ui.rotate(step); haptic(6); return true }
-            if (now - lastCrown < 180) return true
-            lastCrown = now; haptic(8); cycle(step)
+    /**
+     * Bezel / crown. Any rotary input works: a physical rotating bezel (Galaxy Watch Classic), a digital crown or bezel (Galaxy Watch,
+     * Pixel Watch) all arrive as ACTION_SCROLL from a rotary encoder; dial-style key events are handled too. One detent is one step.
+     * With a picker open it scrolls the picker, otherwise it changes the preset.
+     */
+    private var rotAcc = 0f
+    private var rotAt = 0L
+    private var rotLogged = 0
+
+    private fun rotarySteps(steps: Int) {
+        if (!ready || steps == 0) return
+        if (ui.active) { ui.rotate(steps); return }
+        val now = SystemClock.uptimeMillis()
+        if (now - lastCrown < 110) return      // each preset change starts a transition: a fast spin goes at about 9 a second
+        lastCrown = now
+        cycle(if (steps > 0) 1 else -1)
+    }
+
+    private fun rotaryDelta(raw: Float) {
+        val now = SystemClock.uptimeMillis()
+        if (now - rotAt > 400) rotAcc = 0f
+        rotAt = now
+        rotAcc += -raw                          // clockwise is positive, the Wear OS convention (the scroll axis points the other way)
+        val whole = if (rotAcc >= 1f) rotAcc.toInt() else if (rotAcc <= -1f) rotAcc.toInt() else 0
+        if (whole != 0) { rotAcc -= whole; rotarySteps(whole) }
+    }
+
+    override fun dispatchGenericMotionEvent(e: MotionEvent): Boolean {
+        val rotary = e.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)
+        if (e.actionMasked == MotionEvent.ACTION_SCROLL && (rotary || !e.isFromSource(InputDevice.SOURCE_CLASS_POINTER))) {
+            val v = e.getAxisValue(MotionEvent.AXIS_SCROLL)
+            if (rotLogged++ < 12) android.util.Log.i("Dynamic", "rotary scroll %.2f (source 0x%x)".format(v, e.source))
+            if (v != 0f) rotaryDelta(v)
             return true
         }
-        return super.onGenericMotionEvent(e)
+        if (rotLogged++ < 12 && e.actionMasked != MotionEvent.ACTION_HOVER_MOVE) android.util.Log.i("Dynamic", "generic motion action %d source 0x%x".format(e.actionMasked, e.source))
+        return super.dispatchGenericMotionEvent(e)
+    }
+
+    override fun onKeyDown(code: Int, e: android.view.KeyEvent): Boolean {
+        when (code) {
+            android.view.KeyEvent.KEYCODE_NAVIGATE_NEXT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT, android.view.KeyEvent.KEYCODE_DPAD_DOWN, android.view.KeyEvent.KEYCODE_PAGE_DOWN -> { rotarySteps(1); return true }
+            android.view.KeyEvent.KEYCODE_NAVIGATE_PREVIOUS, android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_PAGE_UP -> { rotarySteps(-1); return true }
+        }
+        return super.onKeyDown(code, e)
     }
 
     @Deprecated("Deprecated in Java")

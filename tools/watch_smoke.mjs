@@ -43,6 +43,7 @@ def('checkFramebufferStatus', () => K('FRAMEBUFFER_COMPLETE'));
 def('getExtension', () => ({}));
 def('getParameter', k => k === K('MAX_TEXTURE_SIZE') ? 4096 : 'mock');
 def('getError', () => 0);
+def('loadProgramBinary', () => false); def('saveProgramBinary', () => true);
 for (const n of ['compileShader', 'linkProgram', 'detachShader', 'deleteShader', 'deleteProgram', 'useProgram', 'bindTexture', 'activeTexture', 'texParameteri', 'texStorage2D',
   'generateMipmap', 'pixelStorei', 'texImage2D', 'texSubImage2D', 'deleteTexture', 'deleteFramebuffer', 'bindFramebuffer', 'framebufferTexture2D', 'viewport', 'clearColor', 'clear',
   'bindVertexArray', 'enableVertexAttribArray', 'vertexAttribPointer', 'vertexAttribDivisor', 'bindBuffer', 'bufferData', 'enable', 'disable', 'blendFunc', 'flush', 'finish', 'deleteBuffer', 'deleteVertexArray'])
@@ -77,6 +78,8 @@ const sandbox = {
     read: k => store.has(k) ? store.get(k) : null,
     write: (k, v) => { store.set(k, v); },
     emit: (n, t) => { events.push([n, t]); },
+    surface: () => [450, 450],
+    glStats: () => 'mock',
   },
   console: { log() {}, info() {}, debug() {}, warn: (...a) => errors.push('warn: ' + a.join(' ')), error: (...a) => errors.push(a.join(' ')) },
 };

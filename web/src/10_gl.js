@@ -6,7 +6,9 @@ if(!gl){document.body.innerHTML='<p style="padding:40px;font:16px system-ui;colo
 const floatTargets=!!gl.getExtension('EXT_color_buffer_float');
 gl.getExtension('EXT_color_buffer_half_float');gl.getExtension('EXT_float_blend');
 const timerExt=gl.getExtension('EXT_disjoint_timer_query_webgl2');
-const HEADER='#version 300 es\nprecision highp float;precision highp int;precision highp sampler2D;\n';
+/* SIMP: the precision of the simulation passes (curl, divergence, pressure, gradient). Half precision is how the reference
+   WebGL-Fluid-Simulation runs them on phones; highp here keeps every existing look bit for bit. */
+const HEADER='#version 300 es\nprecision highp float;precision highp int;precision highp sampler2D;\n#define SIMP highp\n';
 const emptyVao=gl.createVertexArray();
 
 /* Programs compile asynchronously (KHR_parallel_shader_compile) so boot never stalls the page, and each

@@ -11,7 +11,7 @@ object NativeEngine {
 
     init { System.loadLibrary("dynamicengine") }
 
-    external fun nativeInit(assets: AssetManager, filesDir: String, host: Host): String?
+    external fun nativeInit(assets: AssetManager, filesDir: String, host: Host, dev: Boolean): String?
     external fun nativeCall(name: String, args: DoubleArray?)
     external fun nativeEval(code: String): String?
     external fun nativeBands(levels: FloatArray)

@@ -1,5 +1,6 @@
-in vec2 v;out vec4 o;uniform sampler2D uVel;uniform vec2 uTx;uniform float uWalls;
+precision SIMP float;
+in highp vec2 v,vL,vR,vT,vB;out vec4 o;uniform sampler2D uVel;uniform float uWalls;
 void main(){vec2 C=texture(uVel,v).xy;
-float L=texture(uVel,v-vec2(uTx.x,0.)).x,R=texture(uVel,v+vec2(uTx.x,0.)).x,T=texture(uVel,v+vec2(0.,uTx.y)).y,B=texture(uVel,v-vec2(0.,uTx.y)).y;
-if(uWalls>.5){if(v.x-uTx.x<0.)L=-C.x;if(v.x+uTx.x>1.)R=-C.x;if(v.y+uTx.y>1.)T=-C.y;if(v.y-uTx.y<0.)B=-C.y;}
+float L=texture(uVel,vL).x,R=texture(uVel,vR).x,T=texture(uVel,vT).y,B=texture(uVel,vB).y;
+if(uWalls>.5){if(vL.x<0.)L=-C.x;if(vR.x>1.)R=-C.x;if(vT.y>1.)T=-C.y;if(vB.y<0.)B=-C.y;}
 o=vec4(.5*(R-L+T-B),0.,0.,1.);}

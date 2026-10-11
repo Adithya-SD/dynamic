@@ -1,7 +1,7 @@
 /* Wear OS host, part 2: 10_gl.js with the WebGL canvas replaced by the native OpenGL ES bridge. Same programs, targets and
    uniform setters as the web build, so every pass in 30_engine.js runs unchanged. Compiles are synchronous (no
    KHR_parallel_shader_compile in a native context); the app shows its own splash while Engine.warm() runs. */
-const cv={_w:1,_h:1,dirty:false,
+const cv={_w:1,_h:1,dirty:false,prof:false,passMs:{},
   get width(){return this._w},set width(v){if(v!==this._w){this._w=v;this.dirty=true}},
   get height(){return this._h},set height(v){if(v!==this._h){this._h=v;this.dirty=true}},
   style:__style,addEventListener,removeEventListener,setPointerCapture:__noop,releasePointerCapture:__noop,
@@ -10,15 +10,22 @@ const gl=__gl;
 const floatTargets=!!gl.getExtension('EXT_color_buffer_float');
 gl.getExtension('EXT_color_buffer_half_float');gl.getExtension('EXT_float_blend');
 const timerExt=null;
-const HEADER='#version 300 es\nprecision highp float;precision highp int;precision highp sampler2D;\n';
+/* SIMP: half precision for the simulation passes on the watch, as PavelDoGreat/WebGL-Fluid-Simulation does on phones. */
+const HEADER='#version 300 es\nprecision highp float;precision highp int;precision highp sampler2D;\n#define SIMP mediump\n';
 const emptyVao=gl.createVertexArray();
 
 const KHR=null;
 const programs=new Map(),programTimes={};
+/* Compiled programs are cached on disk by the app (engine.c): the hash covers the full source, the driver is part of the file name. */
+function srcHash(t){let h=2166136261;for(let i=0;i<t.length;i++)h=Math.imul(h^t.charCodeAt(i),16777619);return(h>>>0).toString(16)}
 function startProgram(vs,fs,defs){
   const key=vs+'|'+fs+'|'+defs;let e=programs.get(key);if(e)return e;
-  const p=gl.createProgram(),sh=[[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]].map(([type,name])=>{const s=gl.createShader(type);gl.shaderSource(s,HEADER+defs+SHADERS[name]);gl.compileShader(s);gl.attachShader(p,s);return s});
-  gl.linkProgram(p);e={p,sh,key,t0:performance.now(),ready:false,failed:false,u:null,error:''};programs.set(key,e);return e;
+  const texts=[HEADER+defs+SHADERS[vs],HEADER+defs+SHADERS[fs]],hk=srcHash(texts[0]+'|'+texts[1]);
+  let p=gl.createProgram();
+  if(gl.loadProgramBinary(p,hk)){e={p,sh:[],key,hk,t0:performance.now(),ready:false,failed:false,u:null,error:'',cached:true};programs.set(key,e);return e}
+  gl.deleteProgram(p);p=gl.createProgram();
+  const sh=[[gl.VERTEX_SHADER,texts[0]],[gl.FRAGMENT_SHADER,texts[1]]].map(([type,text])=>{const s=gl.createShader(type);gl.shaderSource(s,text);gl.compileShader(s);gl.attachShader(p,s);return s});
+  gl.linkProgram(p);e={p,sh,key,hk,t0:performance.now(),ready:false,failed:false,u:null,error:'',cached:false};programs.set(key,e);return e;
 }
 function finishProgram(e){
   if(e.ready||e.failed)return;
@@ -26,6 +33,7 @@ function finishProgram(e){
     const u={};
     for(let i=0,n=gl.getProgramParameter(e.p,gl.ACTIVE_UNIFORMS);i<n;i++){const info=gl.getActiveUniform(e.p,i),name=info.name.replace(/\[0\]$/,'');u[name]={loc:gl.getUniformLocation(e.p,info.name),type:info.type,size:info.size}}
     e.u=u;e.ready=true;
+    if(!e.cached)gl.saveProgramBinary(e.p,e.hk);
   }else{e.failed=true;e.error=e.key+': '+e.sh.map(s=>gl.getShaderInfoLog(s)).join(' ')+' '+gl.getProgramInfoLog(e.p);console.error(e.error)}
   for(const s of e.sh){gl.detachShader(e.p,s);gl.deleteShader(s)}e.sh=null;programTimes[e.key]=Math.round(performance.now()-e.t0);
 }
@@ -75,6 +83,15 @@ function target(w,h,fmt='rgba16f',{nearest=false,wrap=false}={}){
 function pair(w,h,fmt,opt){return{r:target(w,h,fmt,opt),w:target(w,h,fmt,opt),swap(){const t=this.r;this.r=this.w;this.w=t}}}
 function kill(t){if(!t)return;if(t.r){kill(t.r);kill(t.w);return}gl.deleteTexture(t.tex);gl.deleteFramebuffer(t.fb);liveTargets.delete(t)}
 function setWrap(t,wrap){for(const x of t.r?[t.r,t.w]:[t]){gl.bindTexture(gl.TEXTURE_2D,x.tex);const m=wrap?gl.REPEAT:gl.CLAMP_TO_EDGE;gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,m);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,m);x.wrap=wrap}}
-function bindOut(t){gl.bindFramebuffer(gl.FRAMEBUFFER,t?t.fb:null);t?gl.viewport(0,0,t.w,t.h):gl.viewport(0,0,cv.width,cv.height)}
-function pass(fs,values,t,defs=''){const prog=program('fullscreen.vert',fs,defs);gl.useProgram(prog.p);setUniforms(prog,values);bindOut(t);gl.bindVertexArray(emptyVao);gl.drawArrays(gl.TRIANGLES,0,3)}
+function bindOut(t){
+  if(t){gl.bindFramebuffer(gl.FRAMEBUFFER,t.fb);gl.viewport(0,0,t.w,t.h);return}
+  const t0=performance.now();gl.bindFramebuffer(gl.FRAMEBUFFER,null);cv.screenMs=(cv.screenMs||0)+performance.now()-t0;   // timed: the first use of the window surface can wait for the display
+  gl.viewport(0,0,cv.sw||cv.width,cv.sh||cv.height);
+}
+/* One frame in a while is timed pass by pass with a full GPU wait after each (cv.prof): tells a slow shader from a slow driver. */
+function pass(fs,values,t,defs=''){
+  const t0=cv.prof?performance.now():0;
+  const prog=program('fullscreen.vert',fs,defs);gl.useProgram(prog.p);setUniforms(prog,values);bindOut(t);gl.bindVertexArray(emptyVao);gl.drawArrays(gl.TRIANGLES,0,3);
+  if(cv.prof){gl.finish();const k=fs+(t?' '+t.w+'x'+t.h:' screen'),a=cv.passMs[k]||(cv.passMs[k]=[0,0]);a[0]+=performance.now()-t0;a[1]++}
+}
 function clearTarget(t){for(const x of t.r?[t.r,t.w]:[t]){gl.bindFramebuffer(gl.FRAMEBUFFER,x.fb);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT)}}
