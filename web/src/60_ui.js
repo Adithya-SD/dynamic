@@ -4,7 +4,7 @@ UI={
   sel:null,selV:[0,0,0,0],selT:null,
   dissolve:0,dissolving:false,hidden:false,waking:false,mask:null,lastInput:performance.now(),
   build(){
-    this.G=[$('#ttl'),$('#sh'),$('#dock'),$('#dlg'),$('#note')];
+    this.G=[$('#ttl'),$('#sh'),$('#dock'),$('#dock2'),$('#st'),$('#dlg'),$('#note')];
     const tabs=$('#tabs'),bd=$('#bd');
     this.tabBtns=[];this.panels=[];
     SCHEMA.tabs.forEach(([id,label,icon],i)=>{
@@ -284,7 +284,7 @@ UI={
   button(parent,text,fn){const row=parent.querySelector(':scope>.sg')||parent.appendChild(el('div','sg'));const b=el('button','ch');b.textContent=text;b.onclick=async()=>{try{await fn()}catch(e){notice(e.message||String(e))}};row.append(b);return b},
 
   /* ---------- sheet & dock ---------- */
-  show(t,force){
+  show(t,force){this.closePops();
     const sh=$('#sh');if(this.open&&this.tab===t&&!force)return this.shut();
     if(this.tab>=0)this.scroll[this.tab]=$('#bd').scrollTop;
     this.tab=t;if(t>0)this.lastTab=t;this.open=true;sh.classList.add('o');
@@ -296,28 +296,50 @@ UI={
   /* Scroll the tab strip (not the page) so the active tab sits inside it. */
   revealTab(){const tb=$('#tabs'),b=this.tabBtns[this.tab];if(!b)return;const x=b.offsetLeft-(tb.clientWidth-b.offsetWidth)/2;tb.scrollTo({left:Math.max(0,x),behavior:'smooth'})},
   shut(){if(this.tab>=0)this.scroll[this.tab]=$('#bd').scrollTop;$('#sh').classList.remove('o');this.open=false;this.disarm();$('#kp').classList.remove('on');$('#kt').classList.remove('on');this.layoutDirty=true;this.persistUi()},
+  /* Dock: the things you reach for most. Presets, Settings, Random, Canvas and 3D live here; Undo, Pause, Clear and Full screen sit
+     behind More so the dock stays small. 3D opens its own adjuster (build3D) so stereo never needs the settings sheet. */
   buildDock(){
-    const dock=$('#dock'),I={p:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',t:'M4 8h9M17 8h3M4 16h3M11 16h9M15 5v6M9 13v6',y:SCHEMA.tabs.find(t=>t[0]==='space')[2],u:'M8 5L3 10l5 5M3 10h10a7 7 0 0 1 7 7',v:'M12 12c-1.7-2.3-3.3-3.8-5-3.8a3.8 3.8 0 1 0 0 7.6c1.7 0 3.3-1.5 5-3.8z',z:'M8 5v14M16 5v14',c:'M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5',f:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'};
-    const add=(id,label,fn)=>{const b=el('button','k',svgIcon(I[id])+(id==='y'?'<i id="sy"></i>':''));b.id='k'+id;b.setAttribute('aria-label',label);b.onclick=()=>fn(b);dock.append(b);return b};
-    add('p','Presets',()=>this.show(0));
-    add('t','Settings',()=>this.show(this.lastTab));
+    const dock=$('#dock'),tray=$('#dock2'),I={p:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',t:'M4 8h9M17 8h3M4 16h3M11 16h9M15 5v6M9 13v6',y:SCHEMA.tabs.find(t=>t[0]==='space')[2],u:'M8 5L3 10l5 5M3 10h10a7 7 0 0 1 7 7',v:'M12 12c-1.7-2.3-3.3-3.8-5-3.8a3.8 3.8 0 1 0 0 7.6c1.7 0 3.3-1.5 5-3.8z',z:'M8 5v14M16 5v14',c:'M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5',f:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+      d:'M8.5 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM15.5 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z',m:'M5 12h.01M12 12h.01M19 12h.01'};
+    const add=(id,label,fn,host=dock)=>{const b=el('button','k',svgIcon(I[id])+(id==='y'?'<i id="sy"></i>':''));b.id='k'+id;b.setAttribute('aria-label',label);b.onclick=()=>fn(b);host.append(b);return b};
+    add('p','Presets',()=>{this.closePops();this.show(0)});
+    add('t','Settings',()=>{this.closePops();this.show(this.lastTab)});
     // Randomise: tap for a new look, hold for the previous one.
     const yb=add('y','Random look (tap: new, hold: back)',()=>{});yb.onclick=null;yb.title='Random look: tap for a new one, hold to go back';
     let yt=0,yl=false;yb.addEventListener('pointerdown',()=>{yl=false;clearTimeout(yt);yt=setTimeout(()=>{yl=true;Rand.back()},450)});
     yb.addEventListener('pointerup',()=>{clearTimeout(yt);if(!yl)Rand.next()});yb.addEventListener('pointerleave',()=>clearTimeout(yt));
-    // Canvas: window -> infinite (endless, never loops) -> wrap (finite world, edges wrap) -> window.
+    // Canvas: window -> infinite (an endless void) -> wrap (finite world, edges wrap) -> window.
     const INF='M12 12c-1.7-2.3-3.3-3.8-5-3.8a3.8 3.8 0 1 0 0 7.6c1.7 0 3.3-1.5 5-3.8zm0 0c1.7 2.3 3.3 3.8 5 3.8a3.8 3.8 0 1 0 0-7.6c-1.7 0-3.3 1.5-5 3.8z',WRAP='M4 9V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3M8 6.5L5.5 9 8 11.5M16 17.5l2.5-2.5-2.5-2.5';
-    const NOTE=['Window · the picture fills the screen','Infinite · tilt (or move the mouse) to fly over an endless canvas','Wrap · a finite world whose edges wrap round; tilt to look around inside it'];
+    const NOTE=['Window · the picture fills the screen','Infinite · tilt (or move the mouse) to fly over an endless void','Wrap · a finite world whose edges wrap round; tilt to look around inside it'];
     const cb=add('v','Canvas: infinite / wrap / window',()=>{const n=((P.cvs|0)+1)%3;this.change('cvs',n);notice(NOTE[n],3000);haptic(10)});
     this.upd.push(()=>{const m=P.cvs|0;cb.classList.toggle('on',m>0);cb.querySelector('path').setAttribute('d',m===2?WRAP:INF);cb.title=NOTE[m]});
-    add('u','Undo',()=>{if(!Engine.restore())notice('Nothing to undo.',1500)});
-    add('z','Pause',b=>{App.paused=!App.paused;b.classList.toggle('on',App.paused);b.querySelector('path').setAttribute('d',App.paused?'M8 5l11 7-11 7z':I.z)});
-    add('c','Clear',()=>Engine.clear());
-    if(PCAPP){const fb=add('f','Window / full screen',()=>PCAPP.toggleFullscreen());fb.innerHTML=svgIcon('M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5')}
+    // 3D: a tap switches it on (in the last mode you used) and opens the adjuster; another tap closes the adjuster.
+    const sb=add('d','3D',()=>{
+      if(this.pop==='st'){this.closePops();return}
+      if(!P.stm){const m=store.get('dynamic.stm',1);this.change('stm',m>0&&m<4?m:1)}
+      this.openPop('st');haptic(10)});
+    this.upd.push(()=>{sb.classList.toggle('on',P.stm>0);if(P.stm>0)store.set('dynamic.stm',P.stm|0)});
+    this.build3D();
+    // More: the tray with the rest.
+    const mb=add('m','More',()=>this.pop==='dock2'?this.closePops():this.openPop('dock2'));mb.title='More: undo, pause, clear, full screen';
+    add('u','Undo',()=>{if(!Engine.restore())notice('Nothing to undo.',1500)},tray);
+    add('z','Pause',b=>{App.paused=!App.paused;b.classList.toggle('on',App.paused);b.querySelector('path').setAttribute('d',App.paused?'M8 5l11 7-11 7z':I.z)},tray);
+    add('c','Clear',()=>Engine.clear(),tray);
+    if(PCAPP){const fb=add('f','Window / full screen',()=>PCAPP.toggleFullscreen(),tray);fb.innerHTML=svgIcon('M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5')}
     else if(!NATIVE&&document.documentElement.requestFullscreen){const I2='M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',I3='M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
-      const fb=add('f','Fullscreen',()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{}));fb.innerHTML=svgIcon(I2);
+      const fb=add('f','Fullscreen',()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{}),tray);fb.innerHTML=svgIcon(I2);
       document.addEventListener('fullscreenchange',()=>{fb.innerHTML=svgIcon(document.fullscreenElement?I3:I2);fb.classList.toggle('on',!!document.fullscreenElement)})}
+    // A touch anywhere else puts the small panels away (drawing still works under them).
+    addEventListener('pointerdown',e=>{if(this.pop&&!e.target.closest('#st,#dock2,#dock'))this.closePops()},true);
   },
+  /* The 3D adjuster: the stereo settings (Look → 3D) as one small panel, built from the same controls so both stay in step. */
+  build3D(){
+    const pop=$('#st');pop.append(el('div','st-h','<b>3D</b><small>glasses · TV · VR headset</small>'));
+    for(const k of['stm','sdep','scnv','slens','ssw','sinv']){const d=PDEF[k];if(!d)continue;pop.append(d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):this.slider(d))}
+  },
+  pop:null,
+  openPop(id){this.closePops();if(this.open)this.shut();this.pop=id;$('#'+id).classList.add('o');$('#kd').classList.toggle('open',id==='st');$('#km').classList.toggle('on',id==='dock2');this.layoutDirty=true},
+  closePops(){if(!this.pop)return;$('#'+this.pop).classList.remove('o');$('#km').classList.remove('on');this.pop=null;this.layoutDirty=true},
 
   /* ---------- per-frame: glass rects, tab capsule, dissolve ---------- */
   R:new Float32Array(32),Q:new Float32Array(16),
@@ -329,7 +351,7 @@ UI={
     this._gt=now;this._dpr=dpr;
     let n=0;const R=this.R,Q=this.Q;
     for(const e of this.G){
-      let o;if(e.id==='sh')o=+getComputedStyle(e).opacity;else if(e.id==='dlg')o=e.open?1:0;else if(e.id==='note')o=e.hidden?0:1;else o=1;
+      let o;if(e.id==='sh'||e.id==='st'||e.id==='dock2')o=+getComputedStyle(e).opacity;else if(e.id==='dlg')o=e.open?1:0;else if(e.id==='note')o=e.hidden?0:1;else o=1;
       o*=1-ease(e._d||0);if(o<.02||n>7)continue;const b=e.getBoundingClientRect();if(b.bottom<0||b.top>VH()||!b.width)continue;
       R.set([b.left*dpr,b.top*dpr,b.width*dpr,b.height*dpr],n*4);Q[n*2]=Math.min((+e.dataset.r||b.height/2)*dpr,b.width*dpr/2,b.height*dpr/2);Q[n*2+1]=o;n++;
     }

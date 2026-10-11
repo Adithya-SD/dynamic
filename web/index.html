@@ -24,6 +24,16 @@ svg{fill:none;stroke:#fff;stroke-linecap:round;stroke-linejoin:round}
 .k i{position:absolute;right:7px;bottom:5px;font:650 10px var(--f);font-style:normal}
 #sh{left:0;right:0;margin:0 auto;width:min(560px,calc(100vw - 24px));bottom:calc(94px + env(safe-area-inset-bottom,0px));height:min(62vh,560px);border-radius:38px;overflow:hidden;opacity:0;transform:translateY(26px) scale(.93);transform-origin:50% 100%;pointer-events:none;transition:opacity .35s,transform .6s cubic-bezier(.2,.9,.25,1.1);display:flex;flex-direction:column}
 #sh.o{opacity:1;transform:none;pointer-events:auto}
+/* More tray (undo, pause, clear, full screen) and the 3D adjuster: small glass panels that rise from the dock. */
+#dock2,#st{left:0;right:0;margin:0 auto;z-index:3;opacity:0;transform:translateY(22px) scale(.94);transform-origin:50% 100%;pointer-events:none;transition:opacity .3s,transform .5s cubic-bezier(.2,.9,.25,1.1)}
+#dock2{width:max-content;bottom:calc(88px + env(safe-area-inset-bottom,0px));display:flex;gap:2px;padding:8px}
+#st{width:min(380px,calc(100vw - 24px));bottom:calc(94px + env(safe-area-inset-bottom,0px));padding:14px 16px 6px;border-radius:30px}
+#dock2.o,#st.o{opacity:1;transform:none;pointer-events:auto}
+#st .st-h{display:flex;justify-content:space-between;align-items:center;margin:0 4px 10px;font:650 15px var(--f)}
+#st .st-h small{font:500 12px var(--f);opacity:.65}
+#st .sl{margin-bottom:2px}
+#st .sw>span{display:none}   /* the panel title already says 3D */
+#st>.sg{display:inline-flex;margin:4px 4px 10px}   /* the two switches sit side by side */
 #tabs{display:flex;margin:8px auto 6px;width:max-content;max-width:calc(100% - 20px);padding:4px;border-radius:22px;background:rgba(255,255,255,.1);gap:2px;flex:none;overflow-x:auto;scrollbar-width:none}#tabs::-webkit-scrollbar{display:none}
 #tabs button{display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border-radius:18px;opacity:.68;transition:opacity .3s,padding .35s}
 #tabs button svg{width:19px;height:19px;stroke-width:1.7;flex:none}
@@ -115,7 +125,7 @@ textarea{resize:vertical;margin:0 0 10px;font-family:ui-monospace,monospace;font
 #boot.out{opacity:0;pointer-events:none}#boot b{font:650 22px var(--f);letter-spacing:.4px}#boot p{margin:0;font-size:13px;color:#fff8}
 #boot i{display:block;width:150px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;--p:.08}#boot i:after{content:"";display:block;height:100%;background:#fff;transform-origin:0 50%;transform:scaleX(var(--p));transition:transform .3s}
 @media(prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
-.watch #ttl,.watch #sh,.watch #dock,.watch #dlg{display:none!important}
+.watch #ttl,.watch #sh,.watch #dock,.watch #dock2,.watch #st,.watch #dlg{display:none!important}
 .watch #note{top:auto;bottom:15%;max-width:70vw;padding:8px 14px;font-size:12px}
 .watch #boot b{font-size:20px}
 </style></head><body>
@@ -127,6 +137,8 @@ textarea{resize:vertical;margin:0 0 10px;font-family:ui-monospace,monospace;font
   <div id="find"><svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg><input id="q" type="search" placeholder="Search settings" autocomplete="off" spellcheck="false" aria-label="Search settings"></div>
   <div id="bd"></div>
 </div>
+<div id="dock2" class="g" data-r="30"></div>
+<div id="st" class="g" data-r="30" role="dialog" aria-label="3D"></div>
 <div id="dock" class="g"></div>
 <dialog id="dlg" class="g" data-r="28"></dialog>
 <div id="note" class="g" data-r="18" role="status" hidden></div>
