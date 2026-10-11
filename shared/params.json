@@ -91,6 +91,7 @@
     {"k":"tinv","tab":"motion","g":"Tilt","l":"Reverse tilt","t":"b","d":0,"preset":false,"help":"Flips which way tilt leans."},
     {"k":"auto","tab":"motion","g":"Auto","l":"Self-painting","min":0,"max":1,"st":0.01,"d":0,"help":"The picture paints itself with automatic strokes."},
     {"k":"amode","tab":"motion","g":"Auto","l":"Self-painting path","t":"c","o":["Wander","Phyllotaxis","Orbit"],"d":0,"when":{"auto":"on"},"help":"The route the automatic strokes take."},
+    {"k":"cln","tab":"look","g":"Light","l":"Clean","min":0,"max":1,"st":0.01,"d":0.6,"preset":false,"help":"Soft and clean, like a plain fluid sim: gentler edges, less relief and sharpening, haze that fades smoothly, a little more glow. 0 = the original crisp look."},
     {"k":"glw","tab":"look","g":"Light","l":"Brightness","min":0.3,"max":3,"st":0.05,"d":0.9,"help":"Overall exposure. Auto brightness keeps it from blowing out."},
     {"k":"ctr","tab":"look","g":"Light","l":"Contrast","min":0.6,"max":1.5,"st":0.01,"d":1.1,"help":"Difference between bright and dark."},
     {"k":"blk","tab":"look","g":"Light","l":"Black level","min":0,"max":0.4,"st":0.01,"d":0.04,"help":"The picture already sets its own black point as high as it can while keeping contrast. This adds more on top. Higher = deeper blacks."},

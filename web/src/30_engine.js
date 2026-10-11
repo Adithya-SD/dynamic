@@ -105,13 +105,13 @@ const Engine={
   },
 
   step(dt,P,field){
-    const tx=[1/this.sim[0],1/this.sim[1]],ref=this.refTx(),a=this.sim[0]/this.sim[1];
+    const tx=[1/this.sim[0],1/this.sim[1]],ref=this.refTx(),a=this.sim[0]/this.sim[1],C=P.cln||0;   // C: the Clean slider
     const aspect=[(a>=1?a:1)*this.world,(a>=1?1:1/a)*this.world];
     if(field.g[0]||field.g[1]||P.bu||field.mode){pass('forces.frag',{uVel:this.vel.r,uDye:this.dye.r,uG:field.g,uAspect:aspect,uPoles:Space.u.uPoles,uBuoy:P.bu,uDt:dt,uFieldStr:field.str,uFieldScale:P.fsc,uTime:field.time,uField:field.mode},this.vel.w);this.vel.swap()}
     const cs=Math.min(this.sim[0],this.sim[1]);
-    if(LEAN)pass('vortlean.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world),uCurlStr:P.curl*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w);
+    if(LEAN)pass('vortlean.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world),uCurlStr:P.curl*(1-.3*C)*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w);
     else{pass('curl.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world)},this.crl);
-      pass('vorticity.frag',{uVel:this.vel.r,uCurl:this.crl,uTx:tx,uCurlStr:P.curl*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w)}
+      pass('vorticity.frag',{uVel:this.vel.r,uCurl:this.crl,uTx:tx,uCurlStr:P.curl*(1-.3*C)*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w)}
     this.vel.swap();
     pass('divergence.frag',{uVel:this.vel.r,uTx:tx,uWalls:this.wrap||this.open?0:1},this.div);
     if(LEAN){for(let i=0,n=Math.max(1,Math.ceil(Gov.iters(dt)/2));i<n;i++){pass('pressure2.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx,uS:i?1:.8},this.prs.w);this.prs.swap()}}
@@ -120,7 +120,7 @@ const Engine={
     pass('gradient.frag',{uP:this.prs.r,uVel:this.vel.r,uTx:tx},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.vel.r,uRefTx:ref,uDt:dt,uDiss:P.vel},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.dye.r,uRefTx:ref,uDt:dt,uDiss:0,uOpen:this.open?1:0},this.fwd);
-    pass('maccormack.frag',{uVel:this.vel.r,uSrc:this.dye.r,uFwd:this.fwd,uRefTx:ref,uSrcTx:[1/this.ink[0],1/this.ink[1]],uDt:dt,uDiss:P.den*FADE,uSub:(.006+.008*P.den)*FADE,uOpen:this.open?1:0},this.dye.w);this.dye.swap();
+    pass('maccormack.frag',{uVel:this.vel.r,uSrc:this.dye.r,uFwd:this.fwd,uRefTx:ref,uSrcTx:[1/this.ink[0],1/this.ink[1]],uDt:dt,uDiss:P.den*FADE,uSub:(.006+.008*P.den)*FADE*(1-.6*C),uMac:1-.7*C,uOpen:this.open?1:0},this.dye.w);this.dye.swap();
   },
 
   particles(dt,P,emit,time,palette,paused,fdt){
@@ -139,10 +139,10 @@ const Engine={
 
   /* Display: compose (fold once) → material → echo → bloom → final (glass, film). */
   render(P,look,glass,toScreen=true,out=null){
-    const res=this.res,sp=Space.u;
-    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.08,uVib:P.vib,uTone:P.tone,...(look.eyes||Eyes.off),uOrbL:look.orbL||[.4,.5,.75],uOrbRim:look.orbRim||[.3,.5,1],uOrbDepth:P.odepth,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
+    const res=this.res,sp=Space.u,C=P.cln||0,mk=Math.pow(1-C,1.5);
+    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.08*(1-C),uVib:P.vib,uTone:P.tone,...(look.eyes||Eyes.off),uOrbL:look.orbL||[.4,.5,.75],uOrbRim:look.orbRim||[.3,.5,1],uOrbDepth:P.odepth,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
     let base=this.scene;
-    if(P.rel>0||P.met>0||P.irs>0||P.fre>0){pass('material.frag',{uScene:this.scene,uTx:[1/res[0],1/res[1]],uRelief:P.rel,uSharp:P.spc,uLight:P.lgt*Math.PI/180,uMetal:P.met,uIris:P.irs,uRim:P.fre,uShine:0},this.lit);base=this.lit}
+    if(P.rel>0||P.met>0||P.irs>0||P.fre>0){pass('material.frag',{uScene:this.scene,uTx:[1/res[0],1/res[1]],uRelief:P.rel*mk,uSharp:P.spc,uLight:P.lgt*Math.PI/180,uMetal:P.met*mk,uIris:P.irs*mk,uRim:P.fre*mk,uShine:0},this.lit);base=this.lit}
     if(P.echo>0){
       if(!this.echo)this.echo=pair(...res,'rgba16f');
       const a=res[0]/res[1];
@@ -169,7 +169,7 @@ const Engine={
       for(let i=1;i<B.length;i++)pass('bloom_down.frag',{uSrc:B[i-1],uTx:[1/B[i-1].w,1/B[i-1].h],uFirst:0},B[i]);
       gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);
       for(let i=B.length-2;i>=0;i--)pass('bloom_up.frag',{uSrc:B[i+1],uTx:[.5/B[i+1].w,.5/B[i+1].h]},B[i]);
-      gl.disable(gl.BLEND);bloomTex=B[0];bloomAmt=look.bloom*.45;
+      gl.disable(gl.BLEND);bloomTex=B[0];bloomAmt=look.bloom*.45*(1+.5*C);
     }
     // Stereo: depth is read from the blurred copies, then each eye's picture is composed into one image the glass and film
     // passes treat like any other.
@@ -181,7 +181,7 @@ const Engine={
     }else if(this.stereo){kill(this.stereo);this.stereo=null}
     if(toScreen)this.lastFrame={base:img,bloom:gb,amt:gamt};
     const dp=res[0]/VW();
-    pass('final.frag',{...Trans.uniforms(look),uUi:this.ui.on?this.ui.r:this.black,uUiA:this.ui.on?this.ui.a:0,uImg:img,uBloom:gb,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dofF,uBlack:Math.min(.38,Exposure.bpS+P.blk*.45),uSharp:P.shp,uRes:res,uBloomAmt:gamt,uVig:P.vig,uContrast:P.ctr,uGrain:P.grain,uLens:lensF,uTime:look.time,uDp:dp,
+    pass('final.frag',{...Trans.uniforms(look),uUi:this.ui.on?this.ui.r:this.black,uUiA:this.ui.on?this.ui.a:0,uImg:img,uBloom:gb,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dofF,uBlack:Math.min(.38,Exposure.bpS+P.blk*.45)*(1-.8*C),uSharp:P.shp*(1-C),uRes:res,uBloomAmt:gamt,uVig:P.vig,uContrast:P.ctr+(1-P.ctr)*.8*C,uGrain:P.grain,uLens:lensF,uTime:look.time,uDp:dp,
       uR:glass.R,uQ:glass.Q,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:st?0:P.blr,uBezel:P.bzl,uDisp:P.dsp},out);
   },
   /* Clean frame (no interface) read straight from an offscreen target: works even when the page is not being presented. */
