@@ -5,6 +5,9 @@
 const FADE=.65;
 /* Overall pace of the picture, in every preset: everything moves at this share of the speed it was designed at. */
 const PACE=.8;
+/* LEAN (set by the Wear OS host): fewer render passes per frame. On the watch the driver spends about a millisecond setting up each pass
+   while the GPU idles, so passes are fused (curl+vorticity), pressure takes two Jacobi iterations per pass and bloom has fewer levels. */
+const LEAN=typeof __LEAN!=='undefined'&&__LEAN,BLOOM_LEVELS=LEAN?3:5;
 const REF=128,MAX_VEL=1500,PART_SIDE=256;
 const Engine={
   vel:null,prs:null,div:null,crl:null,dye:null,fwd:null,
@@ -35,7 +38,7 @@ const Engine={
     if(programIfReady(vs,fs,want)){this.live[key]=want;return want}
     return this.live[key]||(this.live[key]=want);
   },
-  BASE:['ghost','blur','stereo','shift','pshift','copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material','bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
+  BASE:['ghost','blur','stereo','shift','pshift','copy','advect','maccormack','divergence','curl','vorticity','pressure','gradient','fade','forces','material',...(LEAN?['vortlean','pressure2']:[]),'bloom_down','bloom_up','echo','final','particles_update','compose','geo'].map(n=>['fullscreen.vert',n+'.frag']).concat([['splat.vert','splat.frag'],['particles.vert','particles.frag']]),
   /* Compile everything the first frame needs, in parallel. Other spaces follow quietly, one at a time. */
   async warm(onProgress){
     const d=this.spaceDefs(Space.u.uSpace),list=this.BASE.filter(([,f])=>f!=='compose.frag').map(x=>[...x,'']);
@@ -70,7 +73,7 @@ const Engine={
         if(this.dye){pass('copy.frag',{uSrc:this.dye.r,uScale:1},n.dye.r)}}
       const pw=Math.round(s.ink[0]*s.pq),ph=Math.round(s.ink[1]*s.pq);
       if(force||!this.ptx||this.ptx.w!==pw||this.ptx.h!==ph)n.ptx=T(pw,ph,'rgba16f');
-      if(force||!resSame){n.scene=T(...s.res,'rgba16f');n.lit=T(...s.res,'rgba16f');n.bloom=[];let bw=s.res[0],bh=s.res[1];for(let i=0;i<5;i++){bw=Math.max(1,bw>>1);bh=Math.max(1,bh>>1);n.bloom.push(T(bw,bh,'rgba16f'))}}
+      if(force||!resSame){n.scene=T(...s.res,'rgba16f');n.lit=T(...s.res,'rgba16f');n.bloom=[];let bw=s.res[0],bh=s.res[1];for(let i=0;i<BLOOM_LEVELS;i++){bw=Math.max(1,bw>>1);bh=Math.max(1,bh>>1);n.bloom.push(T(bw,bh,'rgba16f'))}}
       for(const k in n){const old=this[k];if(Array.isArray(old))old.forEach(kill);else kill(old);this[k]=n[k]}
       if(n.dye){this.undo.forEach(u=>kill(u));this.undo=[]}
       if(n.ptx){kill(this.ptx2);this.ptx2=null}
@@ -102,11 +105,15 @@ const Engine={
     const tx=[1/this.sim[0],1/this.sim[1]],ref=this.refTx(),a=this.sim[0]/this.sim[1];
     const aspect=[(a>=1?a:1)*this.world,(a>=1?1:1/a)*this.world];
     if(field.g[0]||field.g[1]||P.bu||field.mode){pass('forces.frag',{uVel:this.vel.r,uDye:this.dye.r,uG:field.g,uAspect:aspect,uPoles:Space.u.uPoles,uBuoy:P.bu,uDt:dt,uFieldStr:field.str,uFieldScale:P.fsc,uTime:field.time,uField:field.mode},this.vel.w);this.vel.swap()}
-    pass('curl.frag',{uVel:this.vel.r,uTx:tx,uScale:Math.min(this.sim[0],this.sim[1])/(REF*this.world)},this.crl);
-    pass('vorticity.frag',{uVel:this.vel.r,uCurl:this.crl,uTx:tx,uCurlStr:P.curl*REF*this.world/Math.min(this.sim[0],this.sim[1]),uDt:dt,uMaxVel:MAX_VEL},this.vel.w);this.vel.swap();
+    const cs=Math.min(this.sim[0],this.sim[1]);
+    if(LEAN)pass('vortlean.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world),uCurlStr:P.curl*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w);
+    else{pass('curl.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world)},this.crl);
+      pass('vorticity.frag',{uVel:this.vel.r,uCurl:this.crl,uTx:tx,uCurlStr:P.curl*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w)}
+    this.vel.swap();
     pass('divergence.frag',{uVel:this.vel.r,uTx:tx,uWalls:this.wrap?0:1},this.div);
-    pass('copy.frag',{uSrc:this.prs.r,uScale:.8},this.prs.w);this.prs.swap();
-    for(let i=0,it=Gov.iters(dt);i<it;i++){pass('pressure.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx},this.prs.w);this.prs.swap()}
+    if(LEAN){for(let i=0,n=Math.max(1,Math.ceil(Gov.iters(dt)/2));i<n;i++){pass('pressure2.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx,uS:i?1:.8},this.prs.w);this.prs.swap()}}
+    else{pass('copy.frag',{uSrc:this.prs.r,uScale:.8},this.prs.w);this.prs.swap();
+      for(let i=0,it=Gov.iters(dt);i<it;i++){pass('pressure.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx},this.prs.w);this.prs.swap()}}
     pass('gradient.frag',{uP:this.prs.r,uVel:this.vel.r,uTx:tx},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.vel.r,uRefTx:ref,uDt:dt,uDiss:P.vel},this.vel.w);this.vel.swap();
     pass('advect.frag',{uVel:this.vel.r,uSrc:this.dye.r,uRefTx:ref,uDt:dt,uDiss:0},this.fwd);

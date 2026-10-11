@@ -61,7 +61,7 @@ function setUniforms(prog,values){
   }
 }
 const FORMATS={
-  rgba16f:[gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT],rg16f:[gl.RG16F,gl.RG,gl.HALF_FLOAT],r16f:[gl.R16F,gl.RED,gl.HALF_FLOAT],
+  rgba16f:[gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT],rg16f:[gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT],r16f:[gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT],   // every target is RGBA16F: on the watch's Mali-G68 the one- and two-channel formats make each render pass ~2x slower (measured: 7-11 fps vs 30 fps). The reference WebGL-Fluid-Simulation falls back to RGBA16F the same way where R16F/RG16F are missing.
   rgba32f:[gl.RGBA32F,gl.RGBA,gl.FLOAT],rgba8:[gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE]
 };
 const liveTargets=new Set();

@@ -2,6 +2,7 @@
    (wear/src/main/cpp/engine.c) supplies __gl (OpenGL ES 3 in WebGL2's shape) and __host (clock, files, events to the app).
    This file is only used in the watch bundle (tools/build_web.py → wear assets/engine.js). */
 var window=globalThis,self=globalThis;
+var __LEAN=true;   // the engine runs its lean pass set here (see LEAN in 30_engine.js)
 var innerWidth=450,innerHeight=450,devicePixelRatio=1;
 var performance={now:()=>__host.now()};
 const __noop=function(){};
