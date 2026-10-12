@@ -344,6 +344,15 @@ open class MainActivity : Activity() {
     private class SaveJob(val uri: Uri, val stream: OutputStream, val where: String)
 
     private inner class Bridge {
+        /** 0 landscape (the default), 1 any way up, 2 portrait. Landscape and portrait still flip between their two ends. */
+        @JavascriptInterface fun setOrientation(mode: Int) = runOnUiThread {
+            requestedOrientation = when (mode) {
+                1 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+                2 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+        }
+
         @JavascriptInterface fun haptic(ms: Int) {
             val v = getSystemService(Vibrator::class.java) ?: return
             if (v.hasVibrator()) v.vibrate(VibrationEffect.createOneShot(ms.coerceIn(1, 200).toLong(), VibrationEffect.DEFAULT_AMPLITUDE))

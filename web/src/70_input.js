@@ -48,7 +48,17 @@ const Input={
       for(let i=1;i<=k;i++){const x=p.fx+dx*i/k,y=p.fy+dy*i/k;this.emit(x,y,vx/k,vy/k,inkColor(p.o,sp,x/VW(),1-y/VH(),p.id).map(z=>z*cs*Math.sqrt(pk)),rs)}
       p.fx=p.x;p.fy=p.y;
     }
-    if(P.auto>0&&!App.paused)this.auto(dt,r);
+    if(P.auto>0&&!App.paused)Space.mode===3?this.autoSphere(dt,r):this.auto(dt,r);
+  },
+  /* Look around: six painters wander over the whole sphere (not just the part on screen), so wherever you turn there is ink moving. */
+  autoSphere(dt,r){
+    const w2=1/(Engine.world*Engine.world),t=clock,k=P.auto*musicSpeed;
+    for(let i=0;i<6;i++){
+      const ph=i*1.047,pos=s=>[((i/6+.2*Math.sin(s*(.06+.011*i)+ph)+s*.004*(i%2?1:-1))%1+1)%1,.5+.3*Math.sin(s*(.08+.017*i)+ph*1.7)];
+      const a=pos(t),b=pos(t-dt);let du=a[0]-b[0];if(du>.5)du-=1;if(du<-.5)du+=1;const dv=a[1]-b[1];
+      const vx=clamp(du/dt*3000,-60,60)*k*2,vy=clamp(dv/dt*3000,-60,60)*k*2;
+      Engine.stamp(a[0],a[1],vx,vy,inkColor(i*2.1,80,a[0],a[1],i+1).map(z=>z*dt*60),r*w2*2,P.ink);
+    }
   },
   hold(p,dt,r){
     p.h=Math.min(p.h+dt,3);const g=p.h/3,m=P.hd|0;let ax=0,ay=0;

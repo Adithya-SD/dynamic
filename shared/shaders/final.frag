@@ -7,6 +7,7 @@ uniform sampler2D uGhost;uniform float uGhostA,uGhostT,uGhostK;uniform vec3 uGho
 uniform float uOrb,uDof;   // ball radius (short-side units) and how out of focus its backdrop is
 uniform vec2 uRes;
 uniform float uBloomAmt,uVig,uContrast,uGrain,uLens,uTime,uDp,uBlack,uSharp;
+uniform vec2 uSb;   // stereo layout (0 none, 1 side-by-side pair, 2 VR halves) and the pair's size: vignette and grain are laid out per picture so both eyes get the same ones
 uniform vec4 uR[8];uniform vec2 uQ[8];
 uniform sampler2D uUi;uniform float uUiA;   // interface ink (uiflow.frag): the interface melting into the flow
 uniform float uN,uRefr,uBlur,uBezel,uDisp;
@@ -70,10 +71,12 @@ void main(){
     col=mix(col,s,smoothstep(0.,1.5*uDp,-best)*a);
   }
   if(uUiA>0.){vec4 u=texture(uUi,v);col=col*(1.-u.a*uUiA)+u.rgb*uUiA;}
-  col*=1.-uVig*dot(v-.5,v-.5);
+  vec2 vv=v,gc=gl_FragCoord.xy;
+  if(uSb.x>.5){bool r=v.x>=.5;float x0=uSb.x<1.5?(r?.5:.5-.5*uSb.y):(r?.5:0.),w=uSb.x<1.5?.5*uSb.y:.5;vv=vec2((v.x-x0)/w,uSb.x<1.5?(v.y-.5)/uSb.y+.5:v.y);gc.x=(v.x-x0)*uRes.x;}
+  col*=1.-uVig*dot(vv-.5,vv-.5);
   col=max((col-.35)*uContrast+.35,0.);
   float live=smoothstep(0.,.02,max(col.r,max(col.g,col.b)));
-  if(uGrain>0.)col+=(hash12(gl_FragCoord.xy+fract(uTime*7.13)*917.)-.5)*uGrain*.12*(.4+col)*live;
-  col+=(hash12(gl_FragCoord.xy*1.37+3.1)-.5)/255.*live;
+  if(uGrain>0.)col+=(hash12(gc+fract(uTime*7.13)*917.)-.5)*uGrain*.12*(.4+col)*live;
+  col+=(hash12(gc*1.37+3.1)-.5)/255.*live;
   o=vec4(col,1.);
 }

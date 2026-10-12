@@ -26,6 +26,9 @@ uniform float uPulse;   // the frame swells by this fraction on every hit
 uniform vec2 uCam;      // infinite / wrap canvas: where the camera looks on the sheet (sheet uv)
 uniform float uPeriodic;// 1: the sheet repeats seamlessly (the wrap canvas) instead of mirroring at its edges
 uniform float uVoid;    // 1: the infinite canvas is a void: past the sheet there is nothing (no mirror, no repeat)
+uniform float uLookOn;  // 1: Look around: the viewer stands inside a sphere painted with the sheet (longitude = x, latitude = y)
+uniform mat3 uLookM;    // view direction -> direction in the sphere's own frame (the device's turn since the neutral pose)
+uniform float uLookK;   // 2 * tan(half the field of view) of the short side
 uniform mat3 uOrbM;     // view-space normal -> normal on the ball's own surface
 uniform int uLoop;      // fold iteration cap; a uniform bound keeps D3D shader compilers from unrolling
 float gParity;          // number of mirror flips; tints alternate tiles
@@ -97,6 +100,11 @@ vec2 foldBall(vec3 n){
 vec2 spaceMapFlat(vec2 fc){
   float sh=min(uRes.x,uRes.y);
   vec2 q=(fc-.5*uRes)/sh;
+  if(uLookOn>.5){   // looking out from the middle of the sphere: the ray through this pixel lands on a longitude and latitude
+    vec3 d=normalize(uLookM*vec3(q*uLookK,1.));
+    gParity=0.;
+    return vec2(atan(d.x,d.z)/TAU+.5,asin(clamp(d.y,-1.,1.))/PI+.5);
+  }
   q*=1.-uPulse;
   q/=max(.3,1.+dot(q,uTilt));   // perspective foreshortening of the tilted plane
   gParity=0.;
@@ -120,6 +128,7 @@ vec2 spaceMap(vec2 fc){
 // Where the sheet ends: mirrored (so nothing samples off the edge) or, on an endless / wrapping canvas, repeated.
 vec2 wrapUV(vec2 m){
   gVoid=0.;
+  if(uLookOn>.5){gVoid=smoothstep(.88,.99,abs(m.y*2.-1.));return vec2(fract(m.x),clamp(m.y,0.,1.));}   // round the sphere; the poles fade into the dark
 #if SPACE<=1
   if(uPeriodic>.5)return fract(m);
   if(uVoid>.5){float d=max(max(-m.x,m.x-1.),max(-m.y,m.y-1.));gVoid=smoothstep(-.015,0.,d);return clamp(m,0.,1.);}

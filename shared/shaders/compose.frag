@@ -7,7 +7,9 @@ uniform float uExposure,uHue,uParityHue,uChroma,uPartOn,uFloor,uVib,uTone;
 // The ball (uOrb in space.glsl): light direction in view space, rim colour, how much depth cueing to apply.
 uniform vec3 uOrbL,uOrbRim;uniform float uOrbDepth;
 // Geometry outline: the pattern itself, crisp, sampled at the same folded sheet position as the ink.
-uniform sampler2D uGeo;uniform vec2 uGeoAsp,uGeoCtr;uniform vec4 uGeoT;uniform float uGeoLine;uniform vec3 uGeoA,uGeoB,uGeoC;uniform float uGeoNest;
+uniform sampler2D uGeo;uniform vec2 uGeoAsp,uGeoCtr;uniform vec4 uGeoT;uniform sampler2D uFr;uniform float uFrAmt;
+uniform float uGeoLine,uGeoQuiet,uGeoDuck;uniform vec3 uGeoA,uGeoB,uGeoC;uniform float uGeoNest;
+// uGeoQuiet: how much the fluid is dimmed while a pattern is on; uGeoDuck: how much ink is cleared out from under the pattern's lines.
 // Eyes: a grid of living eyes in sheet space, so every space folds, mirrors, tiles or wraps them round the ball. Each eye has
 // almond lids, an iris with fibres, a pupil that follows the gaze target (cursor, finger or tilt) and widens on kicks, a glint,
 // idle blinks of its own and a blink on the beat. Returns colour and coverage.
@@ -48,18 +50,22 @@ vec4 eyeAt(vec2 uv){
 }
 // Ink, particles and pattern at one sheet position, tinted by how many mirrors the pixel went through.
 vec3 sceneAt(vec2 uv,float parity){
-  vec3 z=texture(uDye,uv).rgb;
-  if(uPartOn>.5)z+=texture(uPart,uv).rgb;
+  vec3 z=texture(uDye,uv).rgb*(1.-uGeoQuiet);
+  if(uPartOn>.5)z+=texture(uPart,uv).rgb*(1.-.5*uGeoQuiet);
+  vec3 gp=vec3(0.);
   if(uGeoLine>0.){vec2 g=(uv-uGeoCtr)*uGeoAsp/uGeoT.x;
     vec2 a=rot2(g,uGeoT.y),b=rot2(g,uGeoT.z);
     {vec3 L=vec3(texture(uGeo,a*.5+.5).r,texture(uGeo,b*.5+.5).g,texture(uGeo,g*.5+.5).b);
     if(uGeoT.w<.5)L*=vec3(step(max(abs(a.x),abs(a.y)),1.),step(max(abs(b.x),abs(b.y)),1.),step(max(abs(g.x),abs(g.y)),1.));
-    z+=(uGeoA*L.r+uGeoB*L.g+uGeoC*L.b)*uGeoLine;
+    gp=(uGeoA*L.r+uGeoB*L.g+uGeoC*L.b)*uGeoLine;
     // Nested copies (inner by phi, rotated) appear as the music grows more intricate.
     if(uGeoNest>.01){vec2 n=rot2(g*PHI,-uGeoT.y*1.5);vec2 m=rot2(g/PHI*.94,uGeoT.z*.7);
       float i1=texture(uGeo,n*.5+.5).r+texture(uGeo,n*.5+.5).g,o1=texture(uGeo,m*.5+.5).g+texture(uGeo,m*.5+.5).b;
       if(uGeoT.w<.5){i1*=step(max(abs(n.x),abs(n.y)),1.);o1*=step(max(abs(m.x),abs(m.y)),1.);}
-      z+=(uGeoB*i1*.7+uGeoC*o1*.45)*uGeoLine*uGeoNest;}}}
+      gp+=(uGeoB*i1*.7+uGeoC*o1*.45)*uGeoLine*uGeoNest;}
+}}
+  if(uFrAmt>0.)gp+=texture(uFr,uv).rgb*uFrAmt;   // the fractal layer (fractal.frag), in sheet space like the ink
+  z=z*(1.-clamp(dot(gp,vec3(.4)),0.,.9)*uGeoDuck)+gp;
   if(uEyeA.x>0.){vec4 e=eyeAt(uv);z=z*(1.-e.a)+e.rgb;}
   float a=uHue+parity*uParityHue;
   if(uChroma>0.)a+=uChroma*clamp(texture(uCurl,uv).x*.004,-1.,1.)*2.5;

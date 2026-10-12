@@ -45,14 +45,15 @@ const Engine={
     list.push(['fullscreen.vert','compose.frag',d]);
     const errors=await warmPrograms(list,onProgress);this.live.compose=d;return errors;
   },
-  async warmAll(){const l=[];for(let n=0;n<6;n++){const d=this.spaceDefs(n);l.push(['fullscreen.vert','compose.frag',d],['fullscreen.vert','uiflow.frag',d])}return warmPrograms(l)},
+  async warmAll(){const l=[['fullscreen.vert','fractal.frag','']];for(let n=0;n<6;n++){const d=this.spaceDefs(n);l.push(['fullscreen.vert','compose.frag',d],['fullscreen.vert','uiflow.frag',d])}return warmPrograms(l)},
   async warmRest(){
+    startProgram('fullscreen.vert','fractal.frag','');   // the fractal's shader compiles slowly: start it now, in the background, so a fractal preset is ready when chosen
     for(let n=0;n<6;n++){const d=this.spaceDefs(n);for(const[vs,fs]of[['fullscreen.vert','compose.frag'],['fullscreen.vert','uiflow.frag']]){const e=startProgram(vs,fs,d);while(!e.ready&&!e.failed){await new Promise(r=>setTimeout(r,100));if(compileDone(e))finishProgram(e)}}}
   },
   /* Sizes from quality. Render = CSS px × min(DPR,2) × scale. Sheet keeps screen aspect. */
   sizes(Q){
     const dpr=Math.min(devicePixelRatio||1,2),rw=Math.max(64,Math.round(VW()*dpr*Q.rscale)),rh=Math.max(64,Math.round(VH()*dpr*Q.rscale));
-    const a=rw/rh,w=Q.world,max=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    const a=(P.cvs|0)===3&&!(P.orb>0)?2:rw/rh,w=Q.world,max=gl.getParameter(gl.MAX_TEXTURE_SIZE);   // Look around: the sheet is a sphere's map, 2:1 whatever the screen is
     const dims=(short)=>{const s=Math.min(short*w,max);return a>=1?[Math.min(max,Math.round(s*a)),Math.round(s)]:[Math.round(s),Math.min(max,Math.round(s/a))]};
     const sim=dims(Q.sim),ink=dims(Math.min(2048,Math.round(Math.min(rw,rh)*Q.inkq))),pq=Q.pq||.6;
     const bytes=sim[0]*sim[1]*(4*2+2*2+2+2)+ink[0]*ink[1]*8*3+rw*rh*8*4+ink[0]*ink[1]*8*pq*pq+PART_SIDE*PART_SIDE*32;
@@ -84,7 +85,7 @@ const Engine={
   },
   /* The sheet's edges. Wrap (Wrap canvas, or Edges = Wrap): what leaves one side comes back on the other. Open (Infinite canvas): what leaves is gone and
      nothing comes in, so past the sheet there is only void. Otherwise walls. */
-  applyEdges(){const w=!!(P.edges||(P.cvs|0)===2);this.setWrap(w);this.open=!w&&(P.cvs|0)===1},
+  applyEdges(){const w=!!(P.edges||(P.cvs|0)>=2);this.setWrap(w);this.open=!w&&(P.cvs|0)===1},
   setWrap(on){if(on===this.wrap)return;this.wrap=on;for(const t of[this.vel,this.prs,this.div,this.crl,this.dye,this.fwd])t&&setWrap(t,on)},
   refTx(){const a=this.sim[0]/this.sim[1],sx=a>=1?a:1,sy=a>=1?1:1/a;return[1/(REF*sx*this.world),1/(REF*sy*this.world)]},
 
@@ -105,13 +106,13 @@ const Engine={
   },
 
   step(dt,P,field){
-    const tx=[1/this.sim[0],1/this.sim[1]],ref=this.refTx(),a=this.sim[0]/this.sim[1],C=P.cln||0;   // C: the Clean slider
+    const tx=[1/this.sim[0],1/this.sim[1]],ref=this.refTx(),a=this.sim[0]/this.sim[1],C=P.cln||0,G=(P.geo|0)?P.gcl||0:0;   // C: the Clean slider; G: how much a pattern, when there is one, keeps the fluid calm
     const aspect=[(a>=1?a:1)*this.world,(a>=1?1:1/a)*this.world];
     if(field.g[0]||field.g[1]||P.bu||field.mode){pass('forces.frag',{uVel:this.vel.r,uDye:this.dye.r,uG:field.g,uAspect:aspect,uPoles:Space.u.uPoles,uBuoy:P.bu,uDt:dt,uFieldStr:field.str,uFieldScale:P.fsc,uTime:field.time,uField:field.mode},this.vel.w);this.vel.swap()}
     const cs=Math.min(this.sim[0],this.sim[1]);
-    if(LEAN)pass('vortlean.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world),uCurlStr:P.curl*(1-.3*C)*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w);
+    if(LEAN)pass('vortlean.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world),uCurlStr:P.curl*(1-.3*C)*(1-.35*G)*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w);
     else{pass('curl.frag',{uVel:this.vel.r,uTx:tx,uScale:cs/(REF*this.world)},this.crl);
-      pass('vorticity.frag',{uVel:this.vel.r,uCurl:this.crl,uTx:tx,uCurlStr:P.curl*(1-.3*C)*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w)}
+      pass('vorticity.frag',{uVel:this.vel.r,uCurl:this.crl,uTx:tx,uCurlStr:P.curl*(1-.3*C)*(1-.35*G)*REF*this.world/cs,uDt:dt,uMaxVel:MAX_VEL},this.vel.w)}
     this.vel.swap();
     pass('divergence.frag',{uVel:this.vel.r,uTx:tx,uWalls:this.wrap||this.open?0:1},this.div);
     if(LEAN){for(let i=0,n=Math.max(1,Math.ceil(Gov.iters(dt)/2));i<n;i++){pass('pressure2.frag',{uP:this.prs.r,uDiv:this.div,uTx:tx,uS:i?1:.8},this.prs.w);this.prs.swap()}}
@@ -125,6 +126,7 @@ const Engine={
 
   particles(dt,P,emit,time,palette,paused,fdt){
     if(!P.fx)return;
+    const quiet=(P.geo|0)&&!(GEO_BEH[P.beh|0]||{}).parts?P.gcl||0:0;   // beside a pattern the sparks are fewer and fainter, unless they are what draws it
     if(!paused){pass('particles_update.frag',{uState:this.parts.r,uVel:this.vel.r,uRefTx:this.refTx(),uEmit:emit,uDt:dt,uSpeed:P.pspd,uLife:P.plf,uTime:time,uWrap:this.wrap?1:0,uMaxStep:.55,...Geo.particleUniforms(P)},this.parts.w);this.parts.swap()}
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     pass('fade.frag',{uAlpha:1-Math.pow(P.ptl,dt*60)},this.ptx);
@@ -132,15 +134,23 @@ const Engine={
     const prog=program('particles.vert','particles.frag');gl.useProgram(prog.p);
     // Footprint in screen pixels is the same at any particle resolution (0.6 is the phone look); a higher one only sharpens it.
     const pq=this.ptx.w/this.ink[0],scale=this.ink[0]*.6/Math.max(1,this.res[0]/Math.min(devicePixelRatio||1,2));
-    setUniforms(prog,{uState:this.parts.r,uVel:this.vel.r,uSide:PART_SIDE,uTarget:[this.ptx.w,this.ptx.h],uRefTx:this.refTx(),uSize:P.psz*Math.max(1,scale)*pq/.6,uStretch:P.fx===4?2.2:1.1,uBright:P.pbr*.26*Math.min(2,(fdt||dt)*60)*Math.min(2.2,Math.pow((1-P.ptl)/.15,.85)),uMode:P.fx,uTime:time,uSat:P.s,uHue:P.h,uHueRange:P.hr,uSharp:P.psh,...palette});
-    bindOut(this.ptx);gl.bindVertexArray(emptyVao);gl.drawArraysInstanced(gl.TRIANGLES,0,6,Math.max(1,Math.round(P.pn*PART_SIDE*PART_SIDE)));
+    setUniforms(prog,{uState:this.parts.r,uVel:this.vel.r,uSide:PART_SIDE,uTarget:[this.ptx.w,this.ptx.h],uRefTx:this.refTx(),uSize:P.psz*Math.max(1,scale)*pq/.6,uStretch:P.fx===4?2.2:1.1,uBright:P.pbr*(1-.35*quiet)*.26*Math.min(2,(fdt||dt)*60)*Math.min(2.2,Math.pow((1-P.ptl)/.15,.85)),uMode:P.fx,uTime:time,uSat:P.s,uHue:P.h,uHueRange:P.hr,uSharp:P.psh,...palette});
+    bindOut(this.ptx);gl.bindVertexArray(emptyVao);gl.drawArraysInstanced(gl.TRIANGLES,0,6,Math.max(1,Math.round(P.pn*(1-.4*quiet)*PART_SIDE*PART_SIDE)));
     gl.disable(gl.BLEND);
   },
 
   /* Display: compose (fold once) → material → echo → bloom → final (glass, film). */
   render(P,look,glass,toScreen=true,out=null){
     const res=this.res,sp=Space.u,C=P.cln||0,mk=Math.pow(1-C,1.5);
-    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.08*(1-C),uVib:P.vib,uTone:P.tone,...(look.eyes||Eyes.off),uOrbL:look.orbL||[.4,.5,.75],uOrbRim:look.orbRim||[.3,.5,1],uOrbDepth:P.odepth,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms()},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
+    // The fractal (Fractal zoom) is drawn into a sheet-sized texture, a little larger than the screen at most, and read like the ink.
+    let frTex=null;
+    if(Frac.on&&Frac.site){
+      const prog=programIfReady('fullscreen.vert','fractal.frag','');
+      if(prog){const fw=Math.min(this.ink[0],Math.round(res[0]*1.3)),fh=Math.round(fw*this.ink[1]/this.ink[0]);
+        if(!this.fr||this.fr.w!==fw||this.fr.h!==fh){kill(this.fr);this.fr=target(fw,fh,'rgba16f')}
+        gl.useProgram(prog.p);setUniforms(prog,Frac.uniforms());bindOut(this.fr);gl.bindVertexArray(emptyVao);gl.drawArrays(gl.TRIANGLES,0,3);frTex=this.fr}
+    }else if(this.fr){kill(this.fr);this.fr=null}
+    pass('compose.frag',{...sp,uDye:this.dye.r,uPart:this.ptx,uCurl:this.crl,uExposure:look.exposure,uFloor:P.blk*.08*(1-C),uVib:P.vib,uTone:P.tone,...(look.eyes||Eyes.off),uOrbL:look.orbL||[.4,.5,.75],uOrbRim:look.orbRim||[.3,.5,1],uOrbDepth:P.odepth,uHue:look.hue,uParityHue:P.ptint*Math.PI*.66,uChroma:P.chroma,uPartOn:P.fx?1:0,...Geo.composeUniforms(),uFr:frTex||this.black,uFrAmt:frTex?P.fam:0},this.scene,this.variant('fullscreen.vert','compose.frag','compose'));
     let base=this.scene;
     if(P.rel>0||P.met>0||P.irs>0||P.fre>0){pass('material.frag',{uScene:this.scene,uTx:[1/res[0],1/res[1]],uRelief:P.rel*mk,uSharp:P.spc,uLight:P.lgt*Math.PI/180,uMetal:P.met*mk,uIris:P.irs*mk,uRim:P.fre*mk,uShine:0},this.lit);base=this.lit}
     if(P.echo>0){
@@ -173,16 +183,26 @@ const Engine={
     }
     // Stereo: depth is read from the blurred copies, then each eye's picture is composed into one image the glass and film
     // passes treat like any other.
-    let img=base,gb=bloomTex,gamt=bloomAmt,dofF=dof,lensF=P.lens;
+    let img=base,gb=bloomTex,gamt=bloomAmt,dofF=dof,lensF=P.lens,lay={pair:1,ipd:.4};
     if(st){
+      lay=this.stereoLayout(P);
       if(!this.stereo||this.stereo.w!==res[0]||this.stereo.h!==res[1]){kill(this.stereo);this.stereo=target(res[0],res[1],'rgba16f')}
-      pass('stereo.frag',{uImg:base,uBloom:bloomTex,uBloomAmt:bloomAmt,uFarA:farA,uFarB:farB,uRes:res,uMode:st,uDepth:P.sdep,uConv:P.scnv,uSwap:P.ssw,uInv:P.sinv,uLens:P.slens,uPair:P.ssz,uGuide:P.sgd,uOrb:sp.uOrb,uDof:dof},this.stereo);
+      pass('stereo.frag',{uImg:base,uBloom:bloomTex,uBloomAmt:bloomAmt,uFarA:farA,uFarB:farB,uRes:res,uMode:st,uDepth:P.sdep,uConv:P.scnv,uSwap:P.ssw,uInv:P.sinv,uLens:P.slens,uPair:lay.pair,uIpd:lay.ipd,uGuide:P.sgd,uOrb:sp.uOrb,uDof:dof},this.stereo);
       img=this.stereo;gb=this.black;gamt=0;dofF=0;lensF=0;
     }else if(this.stereo){kill(this.stereo);this.stereo=null}
     if(toScreen)this.lastFrame={base:img,bloom:gb,amt:gamt};
     const dp=res[0]/VW();
     pass('final.frag',{...Trans.uniforms(look),uUi:this.ui.on?this.ui.r:this.black,uUiA:this.ui.on?this.ui.a:0,uImg:img,uBloom:gb,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dofF,uBlack:Math.min(.38,Exposure.bpS+P.blk*.45)*(1-.8*C),uSharp:P.shp*(1-C),uRes:res,uBloomAmt:gamt,uVig:P.vig,uContrast:P.ctr+(1-P.ctr)*.8*C,uGrain:P.grain,uLens:lensF,uTime:look.time,uDp:dp,
-      uR:glass.R,uQ:glass.Q,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:st?0:P.blr,uBezel:P.bzl,uDisp:P.dsp},out);
+      uR:glass.R,uQ:glass.Q,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:st?0:P.blr,uBezel:P.bzl,uDisp:P.dsp,uSb:st>=4?[2,0]:st>=2?[1,lay.pair]:[0,0]},out);
+  },
+  /* Free-viewing a pair by eye needs the centres of the two pictures to be no further apart than the eyes (about 62 mm), so the
+     pair is sized to the screen: a screen's width in millimetres is estimated from CSS pixels (a phone's CSS pixel is about 0.16 mm,
+     a desktop's about 0.26 mm). Cross-eyed pairs may sit further apart. VR needs the eye spacing as a share of the screen. */
+  mmPx:0,
+  stereoLayout(P){
+    if(!this.mmPx)this.mmPx=matchMedia('(pointer:coarse)').matches?.16:.264;
+    const W=VW()*this.mmPx,ipd=P.sipd||62,pair=P.sau?Math.min(1,2*ipd*(P.stm===3?1.5:.97)/W):P.ssz;
+    return{pair:clamp(pair,.25,1),ipd:clamp(ipd/W,.05,.5)};
   },
   /* Clean frame (no interface) read straight from an offscreen target: works even when the page is not being presented. */
   capture(P,look,glass){

@@ -79,7 +79,7 @@ def build_watch():
     print(f'Built docs/watch.html: {len(src.encode()):,} bytes')
 
 WATCH_MODULES = ['watch/prelude.js', 'src/00_util.js', 'watch/gl.js', 'src/20_space.js', 'src/30_engine.js', 'src/40_audio.js', 'src/42_beat.js', 'src/46_pad.js',
-                 'src/50_state.js', 'src/56_geo.js', 'src/58_eyes.js', 'src/65_random.js', 'src/70_input.js', 'src/72_tilt.js', 'src/76_trans.js',
+                 'src/50_state.js', 'src/56_geo.js', 'src/57_fractal.js', 'src/58_eyes.js', 'src/65_random.js', 'src/70_input.js', 'src/72_tilt.js', 'src/76_trans.js',
                  'src/77_director.js', 'src/78_perf.js', 'watch/app.js']
 
 def build_watch_engine():

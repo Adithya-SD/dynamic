@@ -37,7 +37,7 @@ const Geo={
   /* Paint into the ink and push the flow. Called once per frame before the simulation step. */
   ring:9,ringW:.08,u:null,line:0,
   /* Outline drawn by compose.frag: three layer colours from the palette, brighter on the beat. */
-  composeUniforms(){const u=this.u;if(!u||!this.line)return{uGeoLine:0};return{uGeo:this.tex,uGeoAsp:u.uAspect,uGeoCtr:this.ctr,uGeoT:[u.uScale,u.uRotA,u.uRotB,this.tile],uGeoLine:this.line,uGeoA:this.cols[0],uGeoB:this.cols[1],uGeoC:this.cols[2],uGeoNest:(GEO[Director.E.geo|0]||{}).fig?0:clamp((Director.cx||0)*1.4-.2,0,1)}},
+  composeUniforms(){const u=this.u;if(!u||!this.line)return{uGeoLine:0};return{uGeo:this.tex,uGeoAsp:u.uAspect,uGeoCtr:this.ctr,uGeoT:[u.uScale,u.uRotA,u.uRotB,this.tile],uGeoLine:this.line,uGeoQuiet:.3*Director.E.gcl,uGeoDuck:Director.E.gcl,uGeoA:this.cols[0],uGeoB:this.cols[1],uGeoC:this.cols[2],uGeoNest:(GEO[Director.E.geo|0]||{}).fig?0:clamp((Director.cx||0)*1.4-.2,0,1)}},
   /* Particle-update uniforms: where the pattern is, so Swarm and Magnet particles can find its lines. */
   particleUniforms(E){const u=this.u,B=GEO_BEH[E.beh|0]||GEO_BEH[0],M=Music;
     if(!u||!this.on)return{uBeh:0};
@@ -220,6 +220,17 @@ function penrose(){if(PENROSE)return PENROSE;const g=PHI;let T=[];for(let i=0;i<
   for(let k=0;k<5;k++){const N=[];for(const[c,A,B,C]of T){if(c===0){const P=[A[0]+(B[0]-A[0])/g,A[1]+(B[1]-A[1])/g];N.push([0,C,P,B],[1,P,C,A])}else{const Q=[B[0]+(A[0]-B[0])/g,B[1]+(A[1]-B[1])/g],R=[B[0]+(C[0]-B[0])/g,B[1]+(C[1]-B[1])/g];N.push([1,R,C,A],[1,Q,R,B],[0,R,Q,A])}}T=N}return PENROSE=T}
 
 /* name, family, draw(d,t), anim. Index 0 is None. */
+/* E8: the 240 roots (all (+-1,+-1,0..) and the even-sign (+-1/2)^8) and the 6720 pairs at distance sqrt(2). Two Coxeter planes give the famous
+   eight rings of thirty; a slow turn from one plane towards the other morphs the projection. */
+const E8U=[[0,.11912,.19274,.21764,.19274,.11912,0,.92193],[0,-.38336,.23693,.74997,.23693,-.38336,0,-.17704]],E8V=[[-.0969,-.46351,-.23693,0,.23693,.46351,.66982,0],[.15941,-.11912,-.56979,0,.56979,.11912,-.54488,0]];
+let E8C=null;
+function e8roots(){
+  if(E8C)return E8C;
+  const v=[];for(let i=0;i<8;i++)for(let j=i+1;j<8;j++)for(const a of[1,-1])for(const b of[1,-1]){const r=new Array(8).fill(0);r[i]=a;r[j]=b;v.push(r)}
+  for(let m=0;m<256;m++){let neg=0;const r=[];for(let i=0;i<8;i++){const n=(m>>i)&1;neg+=n;r.push(n?-.5:.5)}if(neg%2===0)v.push(r)}
+  const e=[];for(let i=0;i<v.length;i++)for(let j=i+1;j<v.length;j++){let dp=0;for(let k=0;k<8;k++)dp+=v[i][k]*v[j][k];if(Math.abs(dp-1)<1e-9)e.push([i,j])}
+  return E8C={v,e};
+}
 const GEO=[
   {n:'None',f:''},
   // ---------- Sacred ----------
@@ -313,5 +324,36 @@ const GEO=[
   {n:'Voronoi',tile:1,f:'Psychedelic',draw(d){const S=[];let seed=11;const r=()=>(seed=(seed*16807)%2147483647)/2147483647;for(let i=0;i<46;i++){const a=i*GOLDEN_ANGLE,q=Math.sqrt(i/46)*1.05;S.push([Math.cos(a)*q+(r()-.5)*.08,Math.sin(a)*q+(r()-.5)*.08])}
     d.field((u,v)=>{let a=9,b=9,k=0;S.forEach((p,i)=>{const t=Math.hypot(u-p[0],v-p[1]);if(t<a){b=a;a=t;k=i}else if(t<b)b=t});const e=b-a;return[Math.exp(-e*e*3000),Math.exp(-a*a*900)*.7,(k%5===0?.25:0)]},400)}},
   {n:'Tunnel Rings',f:'Psychedelic',draw(d){for(let i=0;i<26;i++){const r=.98*Math.pow(.88,i);d.ly(i%3,.95,1+(26-i)*.02).ngon(8,r,i*.13)}}},
+  // ---------- Physics ----------
+  {n:'Superstring',f:'Physics',anim:1,draw(d,t){for(let k=0;k<9;k++){const n=2+k%7,amp=.05+.03*((k*5)%4),R=.2+k*.085;d.ly(k%3,.95,.7+(k%3)*.2).curve(a=>{const r=R+amp*Math.sin(n*a+t*(1.2+k*.17))+amp*.5*Math.sin((n+3)*a-t*(2.1+k*.11));return[r*Math.cos(a),r*Math.sin(a)]},0,TAU,360,true)}}},
+  {n:'Calabi-Yau',f:'Physics',anim:1,noWatch:1,draw(d,t){const N=5,K=7,V=[],E=[0,1,2].map(()=>[]),ca=Math.cos(.78),sa=Math.sin(.78);
+    for(let k1=0;k1<N;k1++)for(let k2=0;k2<N;k2++){const base=V.length;
+      for(let i=0;i<=K;i++)for(let j=0;j<=K;j++){const a=i/K*Math.PI/2,b=(j/K*2-1)*1.05,c1=[Math.cos(a)*Math.cosh(b),-Math.sin(a)*Math.sinh(b)],c2=[Math.sin(a)*Math.cosh(b),Math.cos(a)*Math.sinh(b)];
+        const pw=(c,k)=>{const r=Math.pow(Math.hypot(c[0],c[1]),2/N),th=Math.atan2(c[1],c[0])*2/N+TAU*k/N;return[r*Math.cos(th),r*Math.sin(th)]};
+        const z1=pw(c1,k1),z2=pw(c2,k2);V.push([z1[0]*.8,z2[0]*.8,(z1[1]*ca+z2[1]*sa)*.8]);
+        const id=base+i*(K+1)+j;if(i<K)E[(k1+k2)%3].push([id,id+K+1]);if(j<K)E[(k1+k2+1)%3].push([id,id+1])}}
+    for(let l=0;l<3;l++)d.ly(l,1,.9).wire(V,E[l],.7+.35*Math.sin(t*.25),t*.22,.3,.56,false)}},
+  {n:'Hopf Fibration',f:'Physics',anim:1,noWatch:1,draw(d,t){const V=[],E=[[],[],[]];const c=Math.cos(t*.2),sn=Math.sin(t*.2);
+    [.42,.62,.82,1.0].forEach((eta,ti)=>{const F=14;for(let f=0;f<F;f++){const dl=TAU*f/F,base=V.length,S=44;
+      for(let i=0;i<=S;i++){const psi=TAU*i/S,x1=Math.cos(eta)*Math.cos(psi),x2=Math.cos(eta)*Math.sin(psi),x3=Math.sin(eta)*Math.cos(psi+dl),x4=Math.sin(eta)*Math.sin(psi+dl);
+        const y1=x1*c-x4*sn,y4=x1*sn+x4*c,k=.3/(1.08-y4);V.push([y1*k,x2*k,x3*k]);if(i)E[ti%3].push([base+i-1,base+i])}}});
+    for(let l=0;l<3;l++)d.ly(l,1,.9).wire(V,E[l],.9+t*.1,t*.17,0,1.0,false)}},
+  {n:'E8 Lattice',f:'Physics',anim:1,noWatch:1,draw(d,t){const R=e8roots(),th=.5+.5*Math.sin(t*.18),c=Math.cos(th*Math.PI/2),s=Math.sin(th*Math.PI/2),V=R.v.map(r=>{let x=0,y=0;for(let i=0;i<8;i++){x+=r[i]*(E8U[0][i]*c+E8U[1][i]*s);y+=r[i]*(E8V[0][i]*c+E8V[1][i]*s)}return[x,y,0]}),E=[[],[],[]];
+    R.e.forEach((e,i)=>E[i%3].push(e));for(let l=0;l<3;l++)d.ly(l,.8,.55).wire(V,E[l],0,0,t*.05,.8,false);V.forEach(p=>d.ly(2,.9).dot(p[0]*.8*Math.cos(t*.05)-p[1]*.8*Math.sin(t*.05),p[0]*.8*Math.sin(t*.05)+p[1]*.8*Math.cos(t*.05),.011))}},
+  {n:'Brane',f:'Physics',anim:1,noWatch:1,draw(d,t){const N=24,V=[],Ex=[],Ey=[];for(let i=0;i<=N;i++)for(let j=0;j<=N;j++){const x=i/N*2-1,y=j/N*2-1,h=.11*Math.sin(3*x+t)+.09*Math.sin(4*y-t*1.3)+.07*Math.sin(5*(x+y)+t*.7)+.2*Math.exp(-((x-.5*Math.sin(t*.4))**2+(y-.5*Math.cos(t*.33))**2)*7);
+      V.push([x*.95,y*.95,h*1.6]);const id=i*(N+1)+j;if(i<N)Ex.push([id,id+N+1]);if(j<N)Ey.push([id,id+1])}
+    d.ly(0,1,1).wire(V,Ex,-.95,.0,.35+t*.04,.75,false);d.ly(1,1,1).wire(V,Ey,-.95,.0,.35+t*.04,.75,false)}},
+  {n:'Wormhole',f:'Physics',anim:1,draw(d,t){const M=26,Q=32,V=[],Er=[],Em=[];for(let i=0;i<=M;i++){const z=(i/M*2-1)*1.7,r=.34*Math.sqrt(1+z*z*1.6);for(let j=0;j<Q;j++){const a=TAU*j/Q+t*.15;V.push([r*Math.cos(a),z*.5,r*Math.sin(a)]);const id=i*Q+j;Er.push([id,i*Q+(j+1)%Q]);if(i<M)Em.push([id,id+Q])}}
+    d.ly(0,1,1).wire(V,Er,.55+.25*Math.sin(t*.2),t*.1,.0,1.05,true);d.ly(1,.9,.9).wire(V,Em,.55+.25*Math.sin(t*.2),t*.1,.0,.95,true)}},
+  {n:'Thomas Attractor',f:'Physics',anim:1,draw(d,t){const b=.208186;let x=1.1,y=1.1,z=-.01;const V=[],E=[];for(let i=0;i<4200;i++){const dx=Math.sin(y)-b*x,dy=Math.sin(z)-b*y,dz=Math.sin(x)-b*z;x+=dx*.09;y+=dy*.09;z+=dz*.09;if(i>200){V.push([x*.2,y*.2,z*.2]);E.push([V.length-2,V.length-1])}}E.shift();
+    d.ly(0,1,.8).wire(V,E,t*.2,t*.27,0,1.25,false)}},
+  {n:'Lissajous Strings',f:'Physics',anim:1,draw(d,t){for(let k=0;k<5;k++){const A=2+k,B=3+((k*2)%4),ph=t*(.3+k*.07);d.ly(k%3,.95,.7).curve(a=>[.82*Math.sin(A*a+ph),.82*Math.sin(B*a)],0,TAU,520,true)}}},
+  {n:'Klein Bottle',f:'Physics',anim:1,noWatch:1,draw(d,t){const U=34,W=16,V=[],Eu=[],Ev=[];for(let i=0;i<U;i++)for(let j=0;j<=W;j++){const u=TAU*i/U,v=TAU*j/W,hu=u/2,r=2+Math.cos(hu)*Math.sin(v)-Math.sin(hu)*Math.sin(2*v);V.push([r*Math.cos(u)*.27,r*Math.sin(u)*.27,(Math.sin(hu)*Math.sin(v)+Math.cos(hu)*Math.sin(2*v))*.27]);const id=i*(W+1)+j;Eu.push([id,((i+1)%U)*(W+1)+j]);if(j<W)Ev.push([id,id+1])}
+    d.ly(0,1,.8).wire(V,Eu,.8,t*.2,t*.1,1.15,true);d.ly(1,1,.8).wire(V,Ev,.8,t*.2,t*.1,1.15,true)}},
+  {n:'Black Hole',f:'Physics',draw(d){const ring=(R,sq,al,w,ly)=>{for(let k=0;k<60;k++){const a0=TAU*k/60,a1=TAU*(k+1)/60.5,dop=.35+.65*Math.pow(.5+.5*Math.cos(a0+.6),1.6);d.ly(ly,al*dop,w).arc(0,0,R,a0,a1)}};
+    const sq=(R,q,al,w,ly)=>{for(let k=0;k<72;k++){const a0=TAU*k/72,a1=TAU*(k+1)/72.5,dop=.3+.7*Math.pow(.5+.5*Math.cos(a0+.6),1.5),pts=[0,1].map(m=>{const a=m?a1:a0;return[R*Math.cos(a),R*q*Math.sin(a)]});d.ly(ly,al*dop,w).poly(pts,false)}};
+    for(let i=0;i<12;i++)sq(.38+i*.052,.2,.9,.7+(i%3)*.15,i%2?1:0);
+    ring(.31,1,1,1.8,2);ring(.325,1,.5,1,1);   // the photon ring and the disc bent over the top of the hole
+    for(let k=0;k<30;k++){const a0=Math.PI*(.15+k/30*.7),a1=Math.PI*(.15+(k+1)/30*.7);d.ly(0,.9,1).arc(0,0,.4+.06*Math.sin(k*.3),a0,a1);d.ly(1,.55,.8).arc(0,0,.46,a0,a1)}}},
 ];
-const GEO_FAMILIES=['Sacred','Chakra','Divine','Solids','Math','Fractal','Psychedelic'];
+const GEO_FAMILIES=['Sacred','Chakra','Divine','Solids','Math','Fractal','Psychedelic','Physics'];

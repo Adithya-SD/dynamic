@@ -17,7 +17,7 @@ UI={
       if(id==='quick'){this.buildQuick(panel);continue}
       if(id==='music'){this.buildSpotify(panel);this.buildMusicHead(panel)}   // what is playing comes first
       let group='',G=null;
-      for(const d of SCHEMA.params){if(d.tab!==id||d.hide)continue;
+      for(const d of SCHEMA.params){if(d.tab!==id||d.hide||d.native&&!NATIVE)continue;
         if(d.g!==group){this.closeGroup(G,panel);group=d.g;G=this.openGroup(panel,group,id)}
         const row=d.t==='g'?this.geoPicker(d):d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):d.t==='p'?this.palette(d):this.slider(d);
         row.dataset.s=(d.l+' '+d.g+' '+label+' '+d.k+' '+(d.help||'')+' '+(d.o||[]).join(' ')).toLowerCase();row.dataset.g=d.g;row.dataset.k=d.k;
@@ -312,14 +312,14 @@ UI={
     yb.addEventListener('pointerup',()=>{clearTimeout(yt);if(!yl)Rand.next()});yb.addEventListener('pointerleave',()=>clearTimeout(yt));
     // Canvas: window -> infinite (an endless void) -> wrap (finite world, edges wrap) -> window.
     const INF='M12 12c-1.7-2.3-3.3-3.8-5-3.8a3.8 3.8 0 1 0 0 7.6c1.7 0 3.3-1.5 5-3.8zm0 0c1.7 2.3 3.3 3.8 5 3.8a3.8 3.8 0 1 0 0-7.6c-1.7 0-3.3 1.5-5 3.8z',WRAP='M4 9V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3M8 6.5L5.5 9 8 11.5M16 17.5l2.5-2.5-2.5-2.5';
-    const NOTE=['Window · the picture fills the screen','Infinite · tilt (or move the mouse) to fly over an endless void','Wrap · a finite world whose edges wrap round; tilt to look around inside it'];
-    const cb=add('v','Canvas: infinite / wrap / window',()=>{const n=((P.cvs|0)+1)%3;this.change('cvs',n);notice(NOTE[n],3000);haptic(10)});
-    this.upd.push(()=>{const m=P.cvs|0;cb.classList.toggle('on',m>0);cb.querySelector('path').setAttribute('d',m===2?WRAP:INF);cb.title=NOTE[m]});
+    const NOTE=['Window · the picture fills the screen','Infinite · tilt (or move the mouse) to fly over an endless void','Wrap · a finite world whose edges wrap round; tilt to look around inside it','Look around · you stand still inside the picture; turn the phone (or move the mouse) to look around an endless space'];
+    const cb=add('v','Canvas: infinite / wrap / look around / window',()=>{const n=((P.cvs|0)+1)%4;this.change('cvs',n);notice(NOTE[n],3000);haptic(10)});
+    this.upd.push(()=>{const m=P.cvs|0;cb.classList.toggle('on',m>0);cb.querySelector('path').setAttribute('d',m===3?'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18':m===2?WRAP:INF);cb.title=NOTE[m]});
     // 3D: a tap switches it on (in the last mode you used) and opens the adjuster; another tap closes the adjuster.
     const sb=add('d','3D',()=>{
       if(this.pop==='st'){this.closePops();return}
-      if(!P.stm){const m=store.get('dynamic.stm',1);this.change('stm',m>0&&m<4?m:1)}
-      this.openPop('st');haptic(10)});
+      if(!P.stm){const m=store.get('dynamic.stm',2);this.change('stm',m>0&&m<5?m:2)}
+      this.openPop('st');haptic(10);if(innerHeight>innerWidth&&(P.stm|0)>=2)notice('Turn the phone sideways: the two pictures need room side by side.',4200)});
     this.upd.push(()=>{sb.classList.toggle('on',P.stm>0);if(P.stm>0)store.set('dynamic.stm',P.stm|0)});
     this.build3D();
     // More: the tray with the rest.
@@ -337,7 +337,7 @@ UI={
   /* The 3D adjuster: the stereo settings (Look → 3D) as one small panel, built from the same controls so both stay in step. */
   build3D(){
     const pop=$('#st');pop.append(el('div','st-h','<b>3D</b><small>glasses · free view · VR</small>'));
-    for(const k of['stm','sdep','scnv','ssz','slens','ssw','sgd','sinv']){const d=PDEF[k];if(!d)continue;pop.append(d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):this.slider(d))}
+    for(const k of['stm','sdep','scnv','sau','ssz','sipd','slens','ssw','sgd','sinv']){const d=PDEF[k];if(!d)continue;pop.append(d.t==='c'?this.choice(d):d.t==='b'?this.toggle(d):this.slider(d))}
   },
   pop:null,
   openPop(id){this.closePops();if(this.open)this.shut();this.pop=id;$('#'+id).classList.add('o');$('#kd').classList.toggle('open',id==='st');$('#km').classList.toggle('on',id==='dock2');this.layoutDirty=true},

@@ -5,7 +5,7 @@ const TAU=Math.PI*2,PHI=(1+Math.sqrt(5))/2;
 const mirror1=x=>1-Math.abs(((x%2)+2)%2-1);
 const Space={
   spin:0,shift:[0,0],mobA:0,phase:[0,0],poleT:0,orbT:0,cam:[0,0],pshift:[0,0],sph:[0,0],hypM:[0,0],mode:0,pendingShift:null,inkSize:[1024,1024],orbR:[1,0,0,0,1,0,0,0,1],
-  u:{uLoop:48,uCam:[0,0],uPeriodic:0,uVoid:0,uOrb:0,uPulse:0,uOrbM:[1,0,0,0,1,0,0,0,1],uMobBg:[0,0],uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
+  u:{uLoop:48,uCam:[0,0],uPeriodic:0,uVoid:0,uLookOn:0,uLookM:[1,0,0,0,1,0,0,0,1],uLookK:1.5,uOrb:0,uPulse:0,uOrbM:[1,0,0,0,1,0,0,0,1],uMobBg:[0,0],uTilt:[0,0],uSpace:0,uRes:[1,1],uWorld:1,uSegs:6,uDepth:1,uSpin:0,uTile:1,uShift:[0,0],uHyp:[2,1.7,1,7],uHypOff:[.5,.5],uMob:[0,0],uSpiral:[.3,1.9,1,0],uSpiralPhase:[0,0],uPoles:[-.2,.1,.2,-.1]},
   hyperbolic(p,q){
     p=Math.round(p);q=Math.round(q);
     if((p-2)*(q-2)<=4)q=Math.floor(2+4/(p-2))+1;
@@ -26,8 +26,10 @@ const Space={
     this.poleT+=dt*(.05+Math.abs(d)*.08);
     u.uSpace=P.space|0;u.uRes=res;u.uWorld=world;u.uSegs=P.kal;u.uDepth=P.foldDepth;u.uSpin=this.spin;u.uTile=P.tile;
     /* Canvas: 0 Window (tilt leans the picture), 1 Infinite (tilt is a joystick: the camera scrolls for ever over a world that
-       repeats), 2 Wrap (tilt looks around a finite world whose edges wrap). A ball always takes the tilt itself. */
+       repeats), 2 Wrap (tilt looks around a finite world whose edges wrap), 3 Look around (you stand still in the middle of a sphere
+       painted with the sheet and the device's turn is the camera: no scrolling, no tiling). A ball always takes the tilt itself. */
     const cvs=P.cvs|0,mode=P.orb>0?0:cvs;this.mode=mode;u.uPeriodic=cvs===2?1:0;u.uVoid=cvs===1&&!(P.orb>0)?1:0;   // Wrap repeats the world; Infinite is a void
+    u.uLookOn=mode===3?1:0;if(mode===3){u.uLookK=2*Math.tan((P.lfov||75)*Math.PI/360);this.lookR=Tilt.look;u.uLookM=[this.lookR[0],this.lookR[3],this.lookR[6],this.lookR[1],this.lookR[4],this.lookR[7],this.lookR[2],this.lookR[5],this.lookR[8]]}   // column-major for GL
     const pos=mode===1?[0,0]:tl;   // position-like tilt (Window and Wrap)
     if(mode===1&&dt>0){
       const sp=(P.cspd||1)*.45,vx=tl[0]*sp,vy=tl[1]*sp,sh=Math.min(res[0],res[1]),c=Math.cos(this.spin),s=Math.sin(this.spin),tile=Math.max(P.tile,.05);
@@ -77,6 +79,7 @@ const Space={
   map(fx,fy){
     const u=this.u,R=u.uRes,sh=Math.min(R[0],R[1]);
     let qx=(fx-.5*R[0])/sh,qy=(fy-.5*R[1])/sh;
+    if(u.uLookOn){const M=this.lookR,x=qx*u.uLookK,y=qy*u.uLookK,dx=M[0]*x+M[1]*y+M[2],dy=M[3]*x+M[4]*y+M[5],dz=M[6]*x+M[7]*y+M[8],l=Math.hypot(dx,dy,dz);return[Math.atan2(dx,dz)/TAU+.5,Math.asin(clamp(dy/l,-1,1))/Math.PI+.5]}
     if(u.uOrb>0){
       const bx=qx/u.uOrb,by=qy/u.uOrb,r2=bx*bx+by*by;
       if(r2<1){
@@ -123,12 +126,12 @@ const Space={
     }
     return add(sheet(qx,qy));
   },
-  uv(fx,fy){const m=this.map(fx,fy),u=this.u;return u.uPeriodic&&u.uSpace<2?[fract(m[0]),fract(m[1])]:[mirror1(m[0]),mirror1(m[1])]},
+  uv(fx,fy){const m=this.map(fx,fy),u=this.u;if(u.uLookOn)return[fract(m[0]),clamp(m[1],0,1)];return u.uPeriodic&&u.uSpace<2?[fract(m[0]),fract(m[1])]:[mirror1(m[0]),mirror1(m[1])]},
   /* Map a CSS-pixel brush sample. Returns sheet uv, local scale and the velocity carried into sheet space.
      Velocity (vx,vy) is screen-space, y up, in reference cells/s. */
   brush(x,y,vx,vy){
     const u=this.u,R=u.uRes,s=R[0]/VW(),fx=x*s,fy=R[1]-y*s,c=this.uv(fx,fy);
-    if(u.uSpace===0)return{u:c[0],v:c[1],scale:1,vx,vy};
+    if(u.uSpace===0&&!u.uLookOn)return{u:c[0],v:c[1],scale:1,vx,vy};
     const e=1.5,px=this.uv(fx+e,fy),py=this.uv(fx,fy+e);
     const kx=R[0]*u.uWorld/e,ky=R[1]*u.uWorld/e;
     const j00=(px[0]-c[0])*kx,j01=(py[0]-c[0])*kx,j10=(px[1]-c[1])*ky,j11=(py[1]-c[1])*ky;

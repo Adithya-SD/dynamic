@@ -2,8 +2,8 @@
    talks to, and WatchApp: the few calls the native watch interface makes. Loaded last in the watch bundle. */
 /* Sacred-geometry patterns are drawn by the native 2D canvas. The few that need a per-pixel field (fractals, interference) are too heavy for a watch: they and the
    presets that use them stay out of its list. */
-for(const g of GEO)g.noWatch=!!(g.draw&&/[.]field[(]/.test(String(g.draw)));
-function geoOk(pr){const g=pr.p.geo;if(!g)return true;const i=typeof g==='string'?GEO.findIndex(x=>x.n===g):g|0;return i>0&&!!GEO[i]&&!GEO[i].noWatch}
+for(const g of GEO)g.noWatch=!!(g.noWatch||g.draw&&/[.]field[(]/.test(String(g.draw)));
+function geoOk(pr){if(pr.p.ff)return false;const g=pr.p.geo;if(!g)return true;const i=typeof g==='string'?GEO.findIndex(x=>x.n===g):g|0;return i>0&&!!GEO[i]&&!GEO[i].noWatch}
 const Quick={reset:__noop,touch:__noop,apply:__noop};
 
 function notice(text,ms=5000){__host.emit('toast',JSON.stringify([String(text),ms]))}
@@ -50,7 +50,7 @@ const App={
   last:0,frames:0,fpsT:0,fps:0,cpu:0,ready:false,started:false,prof:{logic:0,step:0,parts:0,render:0,gpu:0,n:0,m:0},
   start(){
     if(this.started)return;this.started=true;const T0=performance.now(),lap=n=>console.log('boot '+n+' '+Math.round(performance.now()-T0)+' ms');
-    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||(P.cvs|0)===2);Engine.open=!Engine.wrap&&(P.cvs|0)===1;this.cvsSeen=P.cvs|0;
+    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||(P.cvs|0)>=2);Engine.open=!Engine.wrap&&(P.cvs|0)===1;this.cvsSeen=P.cvs|0;
     // First run on the watch: light quality, no interface effects, a bit more wrist pour; start on Infinity.
     if(!store.get('dynamic.watchinit',0)){store.set('dynamic.watchinit',1);P.qual=4;P.uh=0;P.st=0;P.tflow=.5;persist();const i=allPresets().findIndex(x=>x.n==='Infinity');if(i>=0)applyPreset(i)}
     Gov.cap=30;

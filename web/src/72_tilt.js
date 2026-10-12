@@ -6,7 +6,7 @@
      Tilt.x / Tilt.y  flat tilt, -1..1, x right, y down (screen coordinates): perspective, tunnel, fluid pour
      Tilt.rv          the same turn as a rotation vector in radians [about x, about y, about z]: the orb rolls with it */
 const Tilt={
-  x:0,y:0,rv:[0,0,0],s:[0,0,0],v:[0,0,0],t:[0,0,0],qc:null,qr:null,src:'',seen:0,away:true,hover:false,follow:true,F:[{},{},{}],
+  x:0,y:0,rv:[0,0,0],s:[0,0,0],v:[0,0,0],t:[0,0,0],qc:null,qr:null,src:'',seen:0,away:true,hover:false,follow:true,F:[{},{},{}],look:[1,0,0,0,1,0,0,0,1],ql:null,
   init(){
     // Phone browser: the W3C orientation event; the rotation matrix it describes has no gimbal lock.
     addEventListener('deviceorientation',e=>this.feedEuler(e.alpha,e.beta,e.gamma),true);
@@ -20,7 +20,7 @@ const Tilt={
     const D=window.DeviceOrientationEvent;
     if(D&&typeof D.requestPermission==='function')addEventListener('pointerdown',()=>{D.requestPermission().catch(()=>{})},{once:true,capture:true});
     // Turning the screen round changes what "left" means: start again from the new pose.
-    const re=()=>{this.qr=null};
+    const re=()=>{this.qr=null;this.ql=null};
     if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',re);else addEventListener('orientationchange',re);
     // Computer: the mouse over the picture.
     cv.addEventListener('pointermove',e=>{
@@ -60,7 +60,7 @@ const Tilt={
     return f.x;
   },
   /* Neutral pose = where the device is now (for scrolling canvases, which never recentre: tap the tilt chip to reset it). */
-  reset(){this.qr=this.qc?this.qc.slice():null;this.t=[0,0,0];this.s=[0,0,0];this.v=[0,0,0]},
+  reset(){this.qr=this.qc?this.qc.slice():null;this.ql=null;this.t=[0,0,0];this.s=[0,0,0];this.v=[0,0,0]},
   frame(dt){
     dt=Math.min(dt,.05);
     if(this.src==='gyro'&&this.qc){
@@ -80,6 +80,24 @@ const Tilt={
     const w=this.src==='mouse'?8:8.5;
     for(let i=0;i<3;i++){const a=-w*w*(this.s[i]-this.t[i])-2*w*this.v[i];this.v[i]+=a*dt;this.s[i]+=this.v[i]*dt}
     this.x=Math.tanh(this.s[1]/1.05);this.y=Math.tanh(this.s[0]/1.05);this.rv=this.s;
+    this.look=this.lookMatrix(dt);
+  },
+  /* Look around: the view's rotation, row-major, taking a direction in camera space (x right, y up, z into the screen) to the
+     sphere's frame. Phone: the device's whole turn since the neutral pose, unlimited and barely smoothed, so the picture stays
+     put in the world while you turn (the neutral pose never drifts back; tap the tilt chip to set it again). Computer: the mouse
+     looks up, down and round. The device's axes are not the screen's, so the turn is carried over to the screen's axes. */
+  lookMatrix(dt){
+    const o=((screen.orientation&&screen.orientation.angle)||window.orientation||0)|0,oo=((o%360)+360)%360;
+    if(this.src==='gyro'&&this.qc&&this.qr){
+      let r=qmul(qconj(this.qr),this.qc);if(r[3]<0)r=r.map(v=>-v);
+      if(!this.ql)this.ql=r.slice();
+      const a=this.ql,sg=a[0]*r[0]+a[1]*r[1]+a[2]*r[2]+a[3]*r[3]<0?-1:1,k=1-Math.exp(-dt/.04),m=a.map((v,i)=>v+(r[i]*sg-v)*k),n=Math.hypot(...m);this.ql=m.map(v=>v/n);
+      const[x,y,z,w]=this.ql,R=[1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w),2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w),2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)];   // current device -> neutral device
+      const B=oo===90?[0,1,0,-1,0,0,0,0,-1]:oo===180?[-1,0,0,0,-1,0,0,0,-1]:oo===270?[0,-1,0,1,0,0,0,0,-1]:[1,0,0,0,1,0,0,0,-1];   // camera axes -> device axes
+      return matMul(matTranspose(B),matMul(R,B));
+    }
+    const yaw=this.s[1]*1.25,pit=this.s[0]*.95,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pit),sp=Math.sin(pit);
+    return matMul([cy,0,sy,0,1,0,-sy,0,cy],[1,0,0,0,cp,-sp,0,sp,cp]);   // yaw about y after pitch about x (mouse down = look down)
   },
   /* Tilt for the scene: [x right, y up], scaled and optionally reversed. */
   get(P){const s=(P.tilt||0)*(P.tinv?-1:1);return[this.x*s,-this.y*s]},
@@ -90,3 +108,4 @@ const Tilt={
 };
 function qmul(a,b){return[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]]}
 function qconj(a){return[-a[0],-a[1],-a[2],a[3]]}
+function matTranspose(a){return[a[0],a[3],a[6],a[1],a[4],a[7],a[2],a[5],a[8]]}

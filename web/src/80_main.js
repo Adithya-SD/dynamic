@@ -5,7 +5,7 @@ const App={
   ready:null,
   async start(){
     let done;this.ready=new Promise(r=>done=r);
-    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||(P.cvs|0)===2);Engine.open=!Engine.wrap&&(P.cvs|0)===1;this.cvsSeen=P.cvs|0;
+    Engine.init();Geo.init();restore();Engine.wrap=!!(P.edges||(P.cvs|0)>=2);Engine.open=!Engine.wrap&&(P.cvs|0)===1;this.cvsSeen=P.cvs|0;
     if(NATIVE&&!store.get('dynamic.phoneq',0)){P.rscale=.6;P.sim=192;store.set('dynamic.phoneq',1);persist()}   // phone GPUs: lighter first run
     if(!Engine.allocate(quality(),true)){P.rscale=.75;P.sim=192;if(!Engine.allocate(quality(),true)){notice(Engine.error);return}}
     UI.build();Input.init();Tilt.init();Eyes.init();Music.init();PadPlay.init();if(WATCH)Watch.init();
@@ -24,6 +24,7 @@ const App={
       else if(e.key==='/'){e.preventDefault();if(!UI.open)UI.show(UI.lastTab);$('#q').focus()}else if(e.key==='Escape'&&UI.open)UI.shut();
       else if(e.key==='ArrowRight'){UI.cycle(1);notice(allPresets()[current].n,1200)}else if(e.key==='ArrowLeft'){UI.cycle(-1);notice(allPresets()[current].n,1200)}
       else if(e.key==='Tab'){e.preventDefault();UI.open?UI.shut():UI.show(UI.lastTab)}else if(e.key==='h'||e.key==='H'){UI.hidden||UI.dissolving?UI.wake():UI.hideNow()}else if(e.key==='r'||e.key==='R'){e.shiftKey?Rand.back():Rand.next()}});
+    cv.addEventListener('wheel',e=>{if(Frac.on){e.preventDefault();Frac.zoom(-e.deltaY*.0025)}},{passive:false});   // the wheel zooms a fractal
     cv.addEventListener('webglcontextlost',e=>{e.preventDefault();this.lost=true;notice('Graphics were reset by the system. Reload to continue; your settings are saved.',60000)});
     requestAnimationFrame(t=>this.frame(t));done();
     Engine.warmRest();
@@ -38,8 +39,9 @@ const App={
     clock+=dt;stepMorph(dt);
     if(P.cyc&&!this.paused&&(this.cycT=(this.cycT||0)+dt)>20){this.cycT=0;UI.cycle()}
 
-    if((P.cvs|0)!==this.cvsSeen){this.cvsSeen=P.cvs|0;Engine.applyEdges();if(!Engine.allocate(quality()))notice(Engine.error)}   // the world is 1.8x the screen on endless and wrapping canvases
-    Tilt.follow=Space.mode!==1;   // an endless canvas scrolls with the tilt and never recentres
+    if((P.cvs|0)!==this.cvsSeen){this.cvsSeen=P.cvs|0;if(this.cvsSeen===3)Tilt.reset();Engine.applyEdges();if(!Engine.allocate(quality()))notice(Engine.error)}   // the world is 1.8x the screen on endless and wrapping canvases
+    if(NATIVE&&NATIVE.setOrientation&&(P.ori|0)!==this.oriSeen){this.oriSeen=P.ori|0;NATIVE.setOrientation(this.oriSeen)}   // the phone follows the Orientation setting (landscape unless you say otherwise)
+    Tilt.follow=Space.mode!==1&&Space.mode!==3;   // an endless canvas scrolls with the tilt and never recentres
     if(WATCH&&P.auto<.45)P.auto=.45;   // a watch has nobody drawing on it all day: it paints itself
     const gq=Gov.begin();
     Music.frame(dt);
@@ -56,7 +58,7 @@ const App={
     this.displayHue+=P.hdrift*dt*.6;
     E.lgt=P.lgt+tl[0]*55-tl[1]*30;   // relief light follows the tilt, like holding it to a lamp
     this.displayHue+=(E.hdrift-P.hdrift)*dt*.6;
-    Eyes.frame(dt,E);L.eyes=Eyes.uniforms(E);
+    Eyes.frame(dt,E);L.eyes=Eyes.uniforms(E);Frac.update(dt,E);
     L.exposure=P.glw*Exposure.k*(1+P.aglow*(beat*.35+Music.kick*.2+Director.flash*.3));L.hue=this.displayHue+(E.h-hueBase)*TAU;L.bloom=E.bloom*(1+P.aglow*(beat*1.6+energy*.6));
     {const a=E.lgt*Math.PI/180;L.orbL=[Math.cos(a)*.7,Math.sin(a)*.7,.75];L.orbRim=paletteRGB(hueBase+E.hr*.35).map(z=>z*.6)}
     L.echoZoom=E.ezoom*.012*dt*60*(1+P.aspace*beat);L.echoTwist=E.etwist*.02*dt*60;L.echoCenter=[tl[0]*.1,tl[1]*.1];L.time=clock;
