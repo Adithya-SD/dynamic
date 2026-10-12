@@ -30,7 +30,7 @@ UI={
 };
 
 /* Random looks only pick patterns the watch can draw. */
-{const look=Rand.look.bind(Rand);Rand.look=seed=>{const v=look(seed);if((v.geo|0)>0&&(!GEO[v.geo|0]||GEO[v.geo|0].noWatch))v.geo=0;return v}}
+{const look=Rand.look.bind(Rand);Rand.look=seed=>{const v=look(seed);if((v.geo|0)>0&&(!GEO[v.geo|0]||GEO[v.geo|0].noWatch))v.geo=0;v.ff=0;return v}}
 
 /* No pixel-buffer fences in the bridge: the exposure sample is a small synchronous read, twice a second. */
 Exposure.sample=function(dt){

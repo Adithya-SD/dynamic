@@ -47,6 +47,18 @@ NEW = [
  ph("Klein Bottle", "ring", "A bottle with no inside: a surface that passes through itself, turning slowly.", "Klein Bottle", 0, 4, 0.5, 0.5),
  ph("Black Hole", "sun", "An accretion disc, the photon ring and the disc bent over the hole. Ink circles it and parts round the dark.", "Black Hole", 0, 5, 0.03, 0.4, bloom=0.8, gswirl=0.35, gsz=1.15),
 
+ {"n": "Thermal Vision", "c": "Effects", "i": "flame", "about": "Everything seen through a thermal camera: cold blue, hot yellow-white.",
+  "p": dict(PH, efx=5, efa=0.95, pal=3, h=0.55, hr=0.6, curl=24, amt=2.8, ink=0.55, den=0.45, rad=0.15, bloom=0.5, vib=1.0, tone=0)},
+ {"n": "Glitch Tunnel", "c": "Effects", "i": "tunnel", "about": "An echo tunnel torn into sliding bands that jump harder on every beat.",
+  "p": dict(PH, efx=2, efa=0.6, echo=0.55, ezoom=0.3, etwist=0.1, pal=9, h=0.8, hr=0.8, curl=30, amt=2.4, ink=0.5, den=0.5, rad=0.14, fx=3, pn=0.3)},
+ {"n": "CRT Mandala", "c": "Effects", "i": "flower", "about": "A kaleidoscope on an old monitor: scanlines and a little glow.",
+  "p": dict(PH, efx=1, efa=0.8, space=1, kal=8, foldDepth=2, pal=1, h=0.1, hr=1.0, curl=30, amt=1.3, bloom=0.7, grain=0.1)},
+ {"n": "Halftone Pop", "c": "Effects", "i": "rainbow", "about": "Comic-book dots as big as the light: loud colour on the page.",
+  "p": dict(PH, efx=4, efa=0.7, pal=9, h=0.0, hr=1.0, s=1.0, curl=28, amt=3.0, ink=0.55, den=0.5, rad=0.15, bloom=0.2, vib=1.5)},
+ {"n": "Pixel Rain", "c": "Effects", "i": "rain", "about": "Falling light in fat pixels.",
+  "p": dict(PH, efx=3, efa=0.45, wy=-14, fx=1, pn=0.6, pal=4, h=0.4, hr=0.5, curl=14, amt=1.0)},
+ {"n": "Poster Sun", "c": "Effects", "i": "sun", "about": "Flat posterised colour: a screen-print of a slow fire.",
+  "p": dict(PH, efx=6, efa=0.6, pal=2, h=0.02, hr=0.7, curl=18, amt=2.8, ink=0.55, den=0.45, rad=0.15, bloom=0.3, bu=14)},
  {"n": "Cosmic Web", "c": "Cosmos", "i": "sparkle", "about": "Look around: you stand still in the middle of an endless web of glowing filaments and dust. Turn the phone (or move the mouse) to look anywhere.",
   "p": {"cvs": 3, "auto": 0.45, "field": 5, "fs": 0.18, "fx": 3, "pn": 0.5, "psz": 1.4, "ptl": 0.94, "pbr": 1.7, "pal": 8, "h": 0.55, "hr": 0.7, "s": 0.9, "curl": 14, "ink": 0.6, "den": 0.3, "vel": 0.05, "amt": 1.7, "rad": 0.14, "bloom": 0.9, "glw": 1.3, "grain": 0.08, "vig": 0.35, "rel": 0}},
  {"n": "Quantum Foam", "c": "Physics", "i": "rain", "about": "Space at the smallest scale: bubbles that appear, tremble and vanish. Fine sparks, fast and small.",
@@ -58,9 +70,9 @@ NEW = [
 ]
 
 cats = D['categories']
-for c in ('Fractal', 'Physics'):
+for c in ('Fractal', 'Physics', 'Effects'):
     if c not in cats:
-        cats.insert(cats.index('Geometry') + 1 if c == 'Fractal' else cats.index('Fractal') + 1, c)
+        cats.insert(cats.index('Geometry') + 1 if c == 'Fractal' else cats.index('Fractal') + 1 if c == 'Physics' else cats.index('Physics') + 1, c)
 names = {p['n'] for p in NEW}
 D['presets'] = [p for p in D['presets'] if p['n'] not in names]
 # new presets go after the Geometry block, before Chakra

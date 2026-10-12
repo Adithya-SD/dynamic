@@ -193,7 +193,7 @@ const Engine={
     if(toScreen)this.lastFrame={base:img,bloom:gb,amt:gamt};
     const dp=res[0]/VW();
     pass('final.frag',{...Trans.uniforms(look),uUi:this.ui.on?this.ui.r:this.black,uUiA:this.ui.on?this.ui.a:0,uImg:img,uBloom:gb,uFarA:farA,uFarB:farB,uOrb:sp.uOrb,uDof:dofF,uBlack:Math.min(.38,Exposure.bpS+P.blk*.45)*(1-.8*C),uSharp:P.shp*(1-C),uRes:res,uBloomAmt:gamt,uVig:P.vig,uContrast:P.ctr+(1-P.ctr)*.8*C,uGrain:P.grain,uLens:lensF,uTime:look.time,uDp:dp,
-      uR:glass.R,uQ:glass.Q,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:st?0:P.blr,uBezel:P.bzl,uDisp:P.dsp,uSb:st>=4?[2,0]:st>=2?[1,lay.pair]:[0,0]},out);
+      uR:glass.R,uQ:glass.Q,uN:toScreen?glass.n:0,uRefr:P.ref,uBlur:st?0:P.blr,uBezel:P.bzl,uDisp:P.dsp,uSb:st>=4?[2,0]:st>=2?[1,lay.pair]:[0,0],uEfx:P.efx|0,uEfa:P.efa,uBeat:Music.beat},out);
   },
   /* Free-viewing a pair by eye needs the centres of the two pictures to be no further apart than the eyes (about 62 mm), so the
      pair is sized to the screen: a screen's width in millimetres is estimated from CSS pixels (a phone's CSS pixel is about 0.16 mm,

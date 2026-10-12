@@ -15,7 +15,7 @@ const Rand={
     v.spin=chance(.6)?u(-.5,.5):0;v.drift=u(-.3,.3);v.ptint=chance(.4)?u(.2,.8):0;v.mir=chance(.15)?1:0;
     if(chance(.25)){v.echo=u(.5,.9);v.ezoom=u(.1,.5);v.etwist=u(-.25,.25)}
     // ball and canvas
-    if(chance(.22)){v.orb=u(.6,.95);v.odepth=u(.5,1)}else if(chance(.4)){v.cvs=chance(.75)?1:2}
+    if(chance(.22)){v.orb=u(.6,.95);v.odepth=u(.5,1)}else if(chance(.4)){v.cvs=chance(.5)?3:chance(.7)?1:2}
     // colour
     v.pal=i(0,SCHEMA.palettes.length-1);v.h=r();v.hr=u(.15,1);v.s=u(.7,1);v.cm=pick([0,0,1,2,3]);v.vib=u(1,1.6);v.tone=chance(.6)?1:0;
     // ink and fluid
@@ -29,6 +29,8 @@ const Rand={
     v.fx=chance(.75)?i(1,4):0;if(v.fx){const st=PRESETS.particleStyles[v.fx];Object.assign(v,st);v.pn=u(.15,.6);v.psh=u(.5,1)}
     // pattern drawn into the fluid
     if(chance(.4)&&GEO.length>1){v.geo=i(1,GEO.length-1);v.beh=i(0,5);v.gsz=u(.7,1.4);v.grot=u(-.3,.3);v.gcnt=u(-.3,.3);v.gswirl=u(-.4,.4);v.gcm=i(0,2)}
+    // sometimes a fractal you can dive into: its colours come from the palette above, the fluid only dresses it
+    if(chance(.12)){v.ff=i(1,FR_SITES.length);v.fsp=u(.25,.6);v.fbt=u(.5,1.2);v.amt=u(.3,.6);v.geo=0}
     for(const k in v){const s=sanitize(k,v[k]);v[k]=s===undefined?D[k]:s}
     return v;
   },

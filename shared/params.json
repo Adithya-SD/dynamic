@@ -113,6 +113,8 @@
     {"k":"chroma","tab":"look","g":"Colour motion","l":"Flow colour shift","min":0,"max":1,"st":0.01,"d":0,"help":"Colour shifts with how fast the fluid swirls."},
     {"k":"grain","tab":"look","g":"Film","l":"Film grain","min":0,"max":1,"st":0.01,"d":0.15,"help":"Fine noise, like film."},
     {"k":"lens","tab":"look","g":"Film","l":"Lens colour fringe","min":0,"max":1,"st":0.01,"d":0,"help":"Red and blue split at the edges, like a cheap lens."},
+    {"k":"efx","tab":"look","g":"Screen effect","l":"Effect","t":"c","o":["Off","Scanlines","Glitch","Pixelate","Halftone","Thermal","Posterize"],"d":0,"help":"A finishing effect on the whole picture: old-monitor scanlines, glitching bands that jump on the beat, big pixels, halftone dots, a thermal camera, or flat posterised colour."},
+    {"k":"efa","tab":"look","g":"Screen effect","l":"Effect amount","min":0,"max":1,"st":0.01,"d":0.5,"when":{"efx":[1,2,3,4,5,6]}},
     {"k":"rel","tab":"look","g":"Material","l":"Surface relief","min":0,"max":2,"st":0.01,"d":0.5,"help":"Makes the ink look like a lit, raised surface."},
     {"k":"spc","tab":"look","g":"Material","l":"Shine tightness","min":4,"max":160,"st":1,"d":40,"help":"Small = broad soft shine, large = tiny sharp highlights."},
     {"k":"lgt","tab":"look","g":"Material","l":"Light angle","min":0,"max":360,"st":1,"d":124,"u":"°","help":"Where the light comes from. Tilting moves it."},

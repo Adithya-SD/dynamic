@@ -9,13 +9,13 @@
 //   uFrB  centre xy, Julia c xy
 //   uFrC  multiplier m (re, im), K (0 = exact loop), loop position 0..1 (for the dissolve)
 //   uFrD  iterations, colour phase, glow width, unused
-uniform vec4 uFrA,uFrB,uFrC,uFrD;
+uniform vec4 uFrA,uFrB,uFrC,uFrD,uFrE;   // uFrE: the loop multiplier lambda (xy) and where in the loop the fade into the next loop starts
 uniform vec2 uFrAsp,uFrCtr;   // the same short-side units as the pattern layer, and where its centre is on the sheet
 uniform vec3 uFrCols[3];
 // Returns (smooth escape count, distance to the edge in pixels); count < 0 means the point never escaped. The distance estimate
 // 0.5 |z| ln|z| / |dz/dc| needs the derivative of the orbit: a complex number for the analytic maps, a 2x2 matrix for the Burning
 // Ship and the Tricorn, which are not analytic.
-vec2 frIter(vec2 c0,float type){
+vec2 frIter(vec2 c0,float type,float pxs){
   vec2 z=vec2(0.),c=c0;
   int cap=int(uFrD.x);
   float B=1e3,n=-1.,dn=1.,deg=2.;
@@ -43,7 +43,7 @@ vec2 frIter(vec2 c0,float type){
   }
   if(n<0.)return vec2(-1.,0.);
   float r=length(z),lr=log(r),mu=n+1.-log(lr)/log(deg);   // smooth escape count
-  return vec2(mu,.5*r*lr/max(dn,1e-30)/uFrA.w);
+  return vec2(mu,.5*r*lr/max(dn,1e-30)/pxs);
 }
 vec3 frColour(vec2 r){
   if(r.x<0.)return vec3(0.);
@@ -57,10 +57,18 @@ vec3 frColour(vec2 r){
 }
 vec3 frLayer(vec2 q,float s){
   vec2 c0=uFrB.xy+cmul(q,uFrC.xy)*s;
-  return frColour(frIter(c0,uFrA.x));
+  return frColour(frIter(c0,uFrA.x,uFrA.w*s));
 }
 vec3 fractalAt(vec2 q){
-  if(uFrC.z<=1.)return frLayer(q,1.);
+  if(uFrC.z<=1.){
+    // Exact loop. The self-similarity is only exact in the limit, so over the last part of each loop the picture fades into the same
+    // picture one loop further out (its first frame), which makes the seam vanish whatever the residual.
+    vec3 a=frLayer(q,1.);
+    float k=smoothstep(uFrE.z,1.,uFrC.w);
+    if(k<=0.)return a;
+    vec2 o=cmul(cmul(q,uFrC.xy),uFrE.xy);
+    return mix(a,frColour(frIter(uFrB.xy+o,uFrA.x,uFrA.w*length(uFrE.xy))),k);
+  }
   float f=uFrC.w,K=uFrC.z,k=smoothstep(0.,1.,f);
   return mix(frLayer(q,pow(K,-f)),frLayer(q,pow(K,1.-f)),k);   // the layer K times larger fades in as the near one fades out
 }

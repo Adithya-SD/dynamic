@@ -72,7 +72,7 @@ const Frac={
     for(let k=0;k<3;k++)this.cols.set(paletteRGB(E.h+E.hr*(k*.5+clock*.01)),k*3);
     const a=Engine.sim[0]/Engine.sim[1],asp=[(a>=1?a:1)*Engine.world,(a>=1?1:1/a)*Engine.world];
     const c=Space.mode===1&&Space.u.uSpace<2?Space.u.uCam:[0,0];
-    return{uFrA:[s.t,1,s.per,mag/sp],uFrB:[cx,cy,s.t===2?this.jc[0]:0,s.t===2?this.jc[1]:0],uFrC:[mre,mim,K,f],uFrD:[E.fit,clock*.012,s.glow,0],
+    return{uFrA:[s.t,1,s.per,mag/sp],uFrB:[cx,cy,s.t===2?this.jc[0]:0,s.t===2?this.jc[1]:0],uFrC:[mre,mim,K,f],uFrE:[this.lam[0],this.lam[1],.5,0],uFrD:[E.fit,clock*.012,s.glow,0],
       uFrCols:this.cols,uFrAsp:asp,uFrCtr:[.5+c[0],.5+c[1]]};
   }
 };

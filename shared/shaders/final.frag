@@ -7,12 +7,32 @@ uniform sampler2D uGhost;uniform float uGhostA,uGhostT,uGhostK;uniform vec3 uGho
 uniform float uOrb,uDof;   // ball radius (short-side units) and how out of focus its backdrop is
 uniform vec2 uRes;
 uniform float uBloomAmt,uVig,uContrast,uGrain,uLens,uTime,uDp,uBlack,uSharp;
+uniform float uEfx,uEfa,uBeat;   // screen effect (1 scanlines, 2 glitch, 3 pixelate, 4 halftone, 5 thermal, 6 posterize), its amount, and the beat
 uniform vec2 uSb;   // stereo layout (0 none, 1 side-by-side pair, 2 VR halves) and the pair's size: vignette and grain are laid out per picture so both eyes get the same ones
 uniform vec4 uR[8];uniform vec2 uQ[8];
 uniform sampler2D uUi;uniform float uUiA;   // interface ink (uiflow.frag): the interface melting into the flow
 uniform float uN,uRefr,uBlur,uBezel,uDisp;
+// Screen effects. Some move where the picture is read from (glitch, pixelate), the rest change its colour once it is made.
+vec2 efxUV(vec2 u){
+  if(uEfx<1.5||uEfx>3.5)return u;
+  if(uEfx>2.5){float cell=mix(2.,36.,uEfa*uEfa)*uDp;return (floor(u*uRes/cell)+.5)*cell/uRes;}
+  float band=floor(u.y*28.),t=floor(uTime*9.),h=hash12(vec2(band,t));   // glitch: bands slide sideways, more of them and further on a beat
+  float on=step(1.-uEfa*.45-uBeat*.25*uEfa,h);
+  return vec2(u.x+on*(hash12(vec2(t,band))-.5)*.16*uEfa*(1.+uBeat*2.),u.y);
+}
+vec3 efxColor(vec3 c,vec2 p){
+  float a=uEfa;
+  if(uEfx<.5||uEfx>6.5)return c;
+  if(uEfx<1.5){c*=(1.-a*.45*(.5+.5*sin(p.y*2.094/uDp)))*(1.-a*.12*(.5+.5*sin(p.x*2.094/uDp)));}
+  else if(uEfx>3.5&&uEfx<4.5){float cell=mix(5.,14.,a)*uDp,l=dot(c,vec3(.299,.587,.114)),r=sqrt(clamp(l,0.,1.5))*.55;vec2 f=fract(p/cell)-.5;c=mix(c,c*smoothstep(r+.08,r-.08,length(f))*1.35,a);}   // halftone: dots as big as the light
+  else if(uEfx>4.5&&uEfx<5.5){float l=clamp(dot(c,vec3(.299,.587,.114))*1.2,0.,1.);   // thermal camera
+    vec3 t=l<.25?mix(vec3(0.,0.,.1),vec3(.35,0.,.5),l*4.):l<.5?mix(vec3(.35,0.,.5),vec3(.9,.1,.1),(l-.25)*4.):l<.75?mix(vec3(.9,.1,.1),vec3(1.,.8,0.),(l-.5)*4.):mix(vec3(1.,.8,0.),vec3(1.),(l-.75)*4.);c=mix(c,t,a);}
+  else if(uEfx>5.5){float n=mix(64.,4.,a);c=floor(c*n+.5)/n;}   // posterize
+  return c;
+}
 // Depth of field: behind the ball the picture is replaced by a wide soft blur (bokeh from the quarter and eighth size copies).
 vec3 base(vec2 u){
+  u=efxUV(u);
   vec3 c=texture(uImg,u).rgb;
   if(uDof>0.){
     float r=length((u-.5)*uRes)/(uOrb*min(uRes.x,uRes.y));
@@ -23,16 +43,17 @@ vec3 base(vec2 u){
   }
   return c;
 }
-vec3 img(vec2 f){vec2 u=vec2(f.x,uRes.y-f.y)/uRes;return base(u)+texture(uBloom,u).rgb*uBloomAmt;}
+vec3 img(vec2 f){vec2 u=vec2(f.x,uRes.y-f.y)/uRes;return base(u)+texture(uBloom,efxUV(u)).rgb*uBloomAmt;}
 // The picture as the glass sees it: already blurred (Gaussian, built once per frame), plus glow.
 vec3 frosted(vec2 f){vec2 u=vec2(f.x,uRes.y-f.y)/uRes;return texture(uFarB,u).rgb+texture(uBloom,u).rgb*uBloomAmt;}
 float sd(vec2 p,vec4 R,float r){vec2 h=R.zw*.5,q=abs(p-R.xy-h)-h+r;return length(max(q,0.))+min(max(q.x,q.y),0.)-r;}
 void main(){
   vec2 fc=vec2(gl_FragCoord.x,uRes.y-gl_FragCoord.y);
   vec3 col;
+  vec2 ve=efxUV(v);
   if(uLens>0.){vec2 d=(v-.5)*uLens*.012;vec3 c0=base(v);   // colour fringes: the blurred backdrop has none, so only the sharp part is shifted
     float k=uDof>0.?smoothstep(.97,1.12,length((v-.5)*uRes)/(uOrb*min(uRes.x,uRes.y)))*uDof:0.;
-    col=vec3(mix(texture(uImg,v+d).r,c0.r,k),c0.g,mix(texture(uImg,v-d).b,c0.b,k))+texture(uBloom,v).rgb*uBloomAmt;}
+    col=vec3(mix(texture(uImg,ve+d).r,c0.r,k),c0.g,mix(texture(uImg,ve-d).b,c0.b,k))+texture(uBloom,ve).rgb*uBloomAmt;}
   else col=img(fc);
   if(uGhostA>0.){
     float t=uGhostT;
@@ -49,6 +70,7 @@ void main(){
     col+=(texture(uImg,v).rgb-s0*.25)*uSharp;col=max(col,0.);}
   // Black point: whatever is fainter than this is pushed to true black, so fading ink never leaves a coloured smudge behind.
   if(uBlack>0.){float l=max(col.r,max(col.g,col.b)),x=l-uBlack;col*=.5*(x+sqrt(x*x+.00015))/max(l,1e-4)/(1.-uBlack);}   // levels with a soft knee: hue kept, haze to true black, the rest stretched back up
+  col=efxColor(col,gl_FragCoord.xy);
   float best=1e5,a=0.,rr=0.;vec4 R=vec4(0.);
   int nr=int(uN);for(int i=0;i<nr;i++){
     vec2 q=abs(fc-uR[i].xy-uR[i].zw*.5)-uR[i].zw*.5;if(max(q.x,q.y)>120.*uDp)continue;   // a panel's shadow is gone 120 px out: skip its distance field
